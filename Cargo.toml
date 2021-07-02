@@ -1,24 +1,5 @@
-[package]
-name = "wayback"
-version = "0.1.0"
-authors = ["Travis Brown <travisrobertbrown@gmail.com>"]
-license = "MPL-2.0"
-description = "Tools for working with the Internet Archive's Wayback Machine"
-keywords = ["archive", "downloader", "wayback", "wayback-machine"]
-categories = ["api-bindings"]
-homepage = "https://github.com/travisbrown/wayback-rs"
-repository = "https://github.com/travisbrown/wayback-rs"
-readme = "README.md"
-edition = "2018"
-
-[dependencies]
-async-std = "1.9.0"
-bytes = "1.0.1"
-chrono = "0.4.19"
-data-encoding = "2.3.2"
-fantoccini = { version = "0.17.3", features = [ "rustls-tls" ] }
-futures = "0.3.7"
-reqwest = { version = "0.11.2", features = [ "json" ] }
-serde_json = "1.0.59"
-sha-1 = "0.9.4"
-thiserror = "1.0.24"
+[workspace]
+members = [
+  "client",
+  "store"
+]

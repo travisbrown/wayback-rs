@@ -22,7 +22,7 @@ mod tests {
     #[test]
     fn compute_digest() {
         let digest = "ZHYT52YPEOCHJD5FZINSDYXGQZI22WJ4";
-        let path = format!("examples/wayback/{}", digest);
+        let path = format!("../examples/wayback/{}", digest);
 
         let mut reader = std::io::BufReader::new(std::fs::File::open(path).unwrap());
 
