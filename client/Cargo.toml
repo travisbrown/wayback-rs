@@ -1,5 +1,5 @@
 [package]
-name = "wayback"
+name = "wayback-client"
 version = "0.1.0"
 authors = ["Travis Brown <travisrobertbrown@gmail.com>"]
 license = "MPL-2.0"
@@ -12,13 +12,23 @@ readme = "README.md"
 edition = "2018"
 
 [dependencies]
-async-std = "1.9.0"
-bytes = "1.0.1"
-chrono = "0.4.19"
-data-encoding = "2.3.2"
-fantoccini = { version = "0.17.3", features = [ "rustls-tls" ] }
-futures = "0.3.7"
+async-std = "1.9"
+bytes = "1.0"
+chrono = "0.4"
+clap = "3.0.0-beta.2"
+csv = "1.1"
+data-encoding = "2.3"
+fantoccini = { version = "0.17", features = [ "rustls-tls" ] }
+flate2 = "1.0"
+futures = "0.3"
+indicatif = "0.16"
+lazy_static = "1.4"
+log = "0.4"
+regex = "1.5"
 reqwest = { version = "0.11.2", features = [ "json" ] }
-serde_json = "1.0.59"
-sha-1 = "0.9.4"
-thiserror = "1.0.24"
+serde_json = "1.0"
+sha-1 = "0.9"
+simplelog = "0.10"
+thiserror = "1.0"
+tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
+tryhard = "0.4"

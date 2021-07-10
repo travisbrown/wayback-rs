@@ -39,7 +39,7 @@ impl IndexClient {
         rows.into_iter()
             .skip(1)
             .map(|row| {
-                Item::parse_optional(
+                Item::parse_optional_record(
                     row.get(0).map(|v| v.as_str()),
                     row.get(1).map(|v| v.as_str()),
                     row.get(2).map(|v| v.as_str()),

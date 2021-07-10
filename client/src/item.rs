@@ -1,4 +1,5 @@
 use chrono::NaiveDateTime;
+use std::str::FromStr;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -21,9 +22,45 @@ pub enum Error {
     InvalidLength { value: String },
     #[error("Invalid status code: {value}")]
     InvalidStatus { value: String },
+    #[error("Invalid Wayback Machine URL: {value}")]
+    InvalidWaybackUrl { value: String },
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+pub struct UrlInfo {
+    pub url: String,
+    pub timestamp: String,
+}
+
+impl UrlInfo {
+    pub fn new(url: String, timestamp: String) -> UrlInfo {
+        UrlInfo { url, timestamp }
+    }
+}
+
+lazy_static::lazy_static! {
+    static ref WAYBACK_URL_RE: regex::Regex = regex::Regex::new(
+        r"^http(:?s)?://web.archive.org/web/(?P<timestamp>\d{14})(?:id_)?/(?P<url>.+)$",
+    )
+    .unwrap();
+}
+
+impl FromStr for UrlInfo {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let captures = WAYBACK_URL_RE.captures(s).ok_or(Error::InvalidWaybackUrl {
+            value: s.to_string(),
+        })?;
+
+        Ok(UrlInfo::new(
+            captures["url"].to_string(),
+            captures["timestamp"].to_string(),
+        ))
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
 /// Information about a single archived snapshot of a page
 pub struct Item {
     pub url: String,
@@ -124,7 +161,7 @@ impl Item {
         ))
     }
 
-    pub fn parse_optional(
+    pub fn parse_optional_record(
         url: Option<&str>,
         timestamp: Option<&str>,
         digest: Option<&str>,
@@ -140,5 +177,16 @@ impl Item {
             length.ok_or(Error::MissingLength)?,
             status.ok_or(Error::MissingStatus)?,
         )
+    }
+
+    pub fn to_record(&self) -> Vec<String> {
+        vec![
+            self.url.to_string(),
+            self.timestamp(),
+            self.digest.to_string(),
+            self.mime_type.to_string(),
+            self.length.to_string(),
+            self.status_code(),
+        ]
     }
 }
