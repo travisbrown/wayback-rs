@@ -10,7 +10,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let opts: Opts = Opts::parse();
     let _ = init_logging(opts.verbose);
 
-    let session = wayback_client::session::Session::new_timestamped(opts.parallelism);
+    let session = wayback_client::session::Session::new_timestamped(opts.digests, opts.parallelism);
     let queries = opts
         .query
         .split(',')
@@ -20,7 +20,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     session.resolve_redirects().await?;
     let (success_count, skipped_count, error_count) = session.download_items().await?;
 
-    println!("Successfully downloaded: {}\nSkipped: {}\nFailed: {}", success_count, skipped_count, error_count);
+    println!(
+        "Successfully downloaded: {}\nSkipped: {}\nFailed: {}",
+        success_count, skipped_count, error_count
+    );
 
     /*let index = wayback_client::cdx::IndexClient::default();
     let client = wayback_client::Downloader::default();
@@ -88,6 +91,9 @@ struct Opts {
     /// Level of parallelism
     #[clap(short, long, default_value = "6")]
     parallelism: usize,
+    /// Known digests file path
+    #[clap(short, long)]
+    digests: Option<String>,
     /// Query
     #[clap(short, long)]
     query: String,

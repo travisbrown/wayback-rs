@@ -36,7 +36,11 @@ pub struct Session {
 impl Session {
     const TIMESTAMP_FMT: &'static str = "%Y%m%d%H%M%S";
 
-    pub fn new<P: AsRef<Path>>(base: P, known_digests: Option<P>, parallelism: usize) -> Session {
+    pub fn new<P1: AsRef<Path>, P2: AsRef<Path>>(
+        base: P1,
+        known_digests: Option<P2>,
+        parallelism: usize,
+    ) -> Session {
         Session {
             base: base.as_ref().to_path_buf(),
             known_digests: known_digests.map(|path| path.as_ref().to_path_buf()),
@@ -46,10 +50,13 @@ impl Session {
         }
     }
 
-    pub fn new_timestamped(parallelism: usize) -> Session {
+    pub fn new_timestamped<P: AsRef<Path>>(
+        known_digests: Option<P>,
+        parallelism: usize,
+    ) -> Session {
         Self::new(
             Utc::now().format(Self::TIMESTAMP_FMT).to_string(),
-            None,
+            known_digests,
             parallelism,
         )
     }
@@ -125,7 +132,6 @@ impl Session {
                     let actual_url_info = actual_url
                         .parse::<super::item::UrlInfo>()
                         .map_err(|_| item)?;
-
 
                     let items = self
                         .index_client
@@ -244,7 +250,11 @@ impl Session {
             }
         }
 
-        Ok((success_count, total_count - success_count - error_count, error_count))
+        Ok((
+            success_count,
+            total_count - success_count - error_count,
+            error_count,
+        ))
     }
 
     fn read_csv<R: Read>(reader: R) -> Result<Vec<Item>, Error> {
