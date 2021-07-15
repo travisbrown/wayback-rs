@@ -60,8 +60,17 @@ impl IndexClient {
         Self::decode_rows(rows)
     }
 
-    pub async fn search(&self, query: &str) -> Result<Vec<Item>, Error> {
-        let query_url = format!("{}?url={}{}", self.base, query, Self::CDX_OPTIONS);
+    pub async fn search(&self, query: &str, timestamp: Option<&str>) -> Result<Vec<Item>, Error> {
+        let timestamp_filter = timestamp
+            .map(|value| format!("&filter=timestamp:{}", value))
+            .unwrap_or_else(|| "".to_string());
+        let query_url = format!(
+            "{}?url={}{}{}",
+            self.base,
+            query,
+            timestamp_filter,
+            Self::CDX_OPTIONS
+        );
         let rows = self
             .underlying
             .get(&query_url)

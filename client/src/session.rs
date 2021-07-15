@@ -67,7 +67,7 @@ impl Session {
         query_log.write_all(queries.join("\n").as_bytes())?;
 
         let mut items: Vec<Item> = futures::stream::iter(queries.iter())
-            .map(|query| Ok(self.index_client.search(query)))
+            .map(|query| Ok(self.index_client.search(query, None)))
             .try_buffer_unordered(self.parallelism)
             .map_ok(|items| {
                 futures::stream::iter(items).map(|item| {
@@ -102,12 +102,28 @@ impl Session {
 
     pub async fn resolve_redirects(&self) -> Result<(), Error> {
         let redirects_item_log = File::open(self.base.join("redirects.csv"))?;
-        let items = Self::read_csv(redirects_item_log)?;
+        let mut items = Self::read_csv(redirects_item_log)?;
+
+        items.sort();
 
         create_dir_all(&self.base.join("data"))?;
 
+        let mut digests = HashSet::new();
+
+        items.retain(|item| digests.insert(item.digest.clone()));
+
+        if let Some(path) = &self.known_digests {
+            let file = File::open(path)?;
+            for line in BufReader::new(file).lines() {
+                digests.remove(line?.trim());
+            }
+        }
+
+        items.retain(|item| digests.remove(&item.digest));
+
         let results = futures::stream::iter(items.iter())
             .map(|item| async move {
+                println!("Resolving: {}", item.url);
                 (
                     item,
                     self.client
@@ -135,14 +151,11 @@ impl Session {
 
                     let items = self
                         .index_client
-                        .search(&actual_url_info.url)
+                        .search(&actual_url_info.url, Some(&actual_url_info.timestamp))
                         .await
                         .map_err(|_| item)?;
 
-                    let actual_item = items
-                        .into_iter()
-                        .find(|item| item.timestamp() == actual_url_info.timestamp)
-                        .ok_or(item)?;
+                    let actual_item = items.into_iter().next().ok_or(item)?;
 
                     let output =
                         File::create(self.base.join("data").join(format!("{}.gz", item.digest)))
@@ -190,6 +203,7 @@ impl Session {
 
         let extras_file = File::open(self.base.join("extras.csv"))?;
         items.extend(Self::read_csv(extras_file)?);
+        items.sort();
 
         let total_count = items.len();
 
@@ -204,7 +218,7 @@ impl Session {
             }
         }
 
-        items.retain(|item| digests.contains(&item.digest));
+        items.retain(|item| digests.remove(&item.digest));
 
         let results = futures::stream::iter(items)
             .map(|item| async {

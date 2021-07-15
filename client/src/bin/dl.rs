@@ -10,20 +10,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let opts: Opts = Opts::parse();
     let _ = init_logging(opts.verbose);
 
-    let session = wayback_client::session::Session::new_timestamped(opts.digests, opts.parallelism);
-    let queries = opts
-        .query
-        .split(',')
-        .flat_map(|screen_name| expand_twitter_queries(screen_name.trim()))
-        .collect::<Vec<_>>();
-    session.save_cdx_results(&queries).await?;
-    session.resolve_redirects().await?;
-    let (success_count, skipped_count, error_count) = session.download_items().await?;
+    let session = if let Some(base) = opts.base {
+        wayback_client::session::Session::new(base, opts.digests, opts.parallelism)
+    } else {
+        wayback_client::session::Session::new_timestamped(opts.digests, opts.parallelism)
+    };
 
-    println!(
-        "Successfully downloaded: {}\nSkipped: {}\nFailed: {}",
-        success_count, skipped_count, error_count
-    );
+    if opts.resume {
+        session.resolve_redirects().await?;
+        let (success_count, skipped_count, error_count) = session.download_items().await?;
+
+        println!(
+            "Successfully downloaded: {}\nSkipped: {}\nFailed: {}",
+            success_count, skipped_count, error_count
+        );
+    } else if let Some(query) = opts.query {
+        let queries = query
+            .split(',')
+            .flat_map(|screen_name| expand_twitter_queries(screen_name.trim()))
+            .collect::<Vec<_>>();
+        session.save_cdx_results(&queries).await?;
+        session.resolve_redirects().await?;
+        let (success_count, skipped_count, error_count) = session.download_items().await?;
+
+        println!(
+            "Successfully downloaded: {}\nSkipped: {}\nFailed: {}",
+            success_count, skipped_count, error_count
+        );
+    }
 
     /*let index = wayback_client::cdx::IndexClient::default();
     let client = wayback_client::Downloader::default();
@@ -94,9 +108,15 @@ struct Opts {
     /// Known digests file path
     #[clap(short, long)]
     digests: Option<String>,
+    /// Base directory
+    #[clap(short, long)]
+    base: Option<String>,
+    /// Resume processing
+    #[clap(short, long)]
+    resume: bool,
     /// Query
     #[clap(short, long)]
-    query: String,
+    query: Option<String>,
 }
 
 fn select_log_level_filter(verbosity: i32) -> LevelFilter {
