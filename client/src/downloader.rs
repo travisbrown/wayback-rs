@@ -1,5 +1,5 @@
 use super::Item;
-use bytes::Bytes;
+use bytes::{Buf, Bytes};
 use reqwest::{header::LOCATION, redirect, Client, StatusCode};
 use std::time::Duration;
 use thiserror::Error;
@@ -13,6 +13,8 @@ pub enum Error {
     ClientError(#[from] reqwest::Error),
     #[error("Unexpected redirect: {0:?}")]
     UnexpectedRedirect(Option<String>),
+    #[error("Unexpected redirect URL: {0:?}")]
+    UnexpectedRedirectUrl(String),
     #[error("Unexpected status code: {0:?}")]
     UnexpectedStatus(StatusCode),
 }
@@ -54,25 +56,12 @@ impl<'a> BackoffStrategy<'a, Error> for RetryStrategy {
     }
 }
 
-#[derive(Debug)]
-pub enum Content {
-    Direct {
-        content: Bytes,
-    },
-    Redirect {
-        location: String,
-        original_content: Bytes,
-        content: Bytes,
-    },
-}
-
-impl Content {
-    fn content(&self) -> &Bytes {
-        match self {
-            Content::Direct { content } => content,
-            Content::Redirect { content, .. } => content,
-        }
-    }
+pub struct RedirectResolution {
+    pub url: String,
+    pub timestamp: String,
+    pub content: Bytes,
+    pub valid_initial_content: bool,
+    pub valid_digest: bool,
 }
 
 #[derive(Clone)]
@@ -113,26 +102,64 @@ impl Downloader {
         )
     }
 
-    pub async fn download_redirect(
+    pub async fn resolve_redirect(
         &self,
         url: &str,
         timestamp: &str,
-    ) -> Result<(String, Bytes), Error> {
-        let response = self
-            .client
-            .get(Downloader::wayback_url(url, timestamp, true))
-            .send()
-            .await?;
+        expected_digest: &str,
+    ) -> Result<RedirectResolution, Error> {
+        let initial_url = Downloader::wayback_url(url, timestamp, true);
+        let initial_response = self.client.head(&initial_url).send().await?;
 
-        match response.status() {
+        match initial_response.status() {
             StatusCode::FOUND => {
-                match response
+                match initial_response
                     .headers()
                     .get(LOCATION)
                     .and_then(|value| value.to_str().ok())
                     .map(str::to_string)
                 {
-                    Some(location) => Ok((location, response.bytes().await?)),
+                    Some(location) => {
+                        let guess = super::redirect::guess_redirect_content(&location);
+                        let mut guess_bytes = guess.as_bytes();
+                        let guess_digest = super::digest::compute_digest(&mut guess_bytes)?;
+
+                        let mut valid_initial_content = true;
+                        let mut valid_digest = true;
+
+                        let content = if guess_digest == expected_digest {
+                            Bytes::from(guess)
+                        } else {
+                            let direct_bytes =
+                                self.client.head(&initial_url).send().await?.bytes().await?;
+                            let direct_digest =
+                                super::digest::compute_digest(&mut direct_bytes.clone().reader())?;
+                            valid_initial_content = false;
+                            valid_digest = direct_digest == expected_digest;
+
+                            direct_bytes
+                        };
+
+                        let info = location
+                            .parse::<super::item::UrlInfo>()
+                            .map_err(|_| Error::UnexpectedRedirectUrl(location))?;
+
+                        let actual_url = self
+                            .direct_resolve_redirect(&info.url, &info.timestamp)
+                            .await?;
+
+                        let actual_info = actual_url
+                            .parse::<super::item::UrlInfo>()
+                            .map_err(|_| Error::UnexpectedRedirectUrl(actual_url))?;
+
+                        Ok(RedirectResolution {
+                            url: actual_info.url,
+                            timestamp: actual_info.timestamp,
+                            content,
+                            valid_initial_content,
+                            valid_digest,
+                        })
+                    }
                     None => Err(Error::UnexpectedRedirect(None)),
                 }
             }
@@ -140,10 +167,10 @@ impl Downloader {
         }
     }
 
-    pub async fn resolve_redirect(&self, url: &str, timestamp: &str) -> Result<String, Error> {
+    async fn direct_resolve_redirect(&self, url: &str, timestamp: &str) -> Result<String, Error> {
         let response = self
             .client
-            .get(Downloader::wayback_url(url, timestamp, true))
+            .head(Downloader::wayback_url(url, timestamp, true))
             .send()
             .await?;
 

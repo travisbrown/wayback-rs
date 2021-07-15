@@ -127,35 +127,22 @@ impl Session {
                 (
                     item,
                     self.client
-                        .download_redirect(&item.url, &item.timestamp())
+                        .resolve_redirect(&item.url, &item.timestamp(), &item.digest)
                         .await,
                 )
             })
             .buffer_unordered(self.parallelism)
             .map(|(item, result)| async move {
-                let (first_url, content) = result.map_err(|_| item)?;
-                if compute_digest(&mut content.clone().reader()).unwrap() == item.digest {
-                    let first_url_info = first_url
-                        .parse::<super::item::UrlInfo>()
-                        .map_err(|_| item)?;
+                let resolution = result.map_err(|_| item)?;
 
-                    let actual_url = self
-                        .client
-                        .resolve_redirect(&first_url_info.url, &first_url_info.timestamp)
-                        .await
-                        .map_err(|_| item)?;
-
-                    let actual_url_info = actual_url
-                        .parse::<super::item::UrlInfo>()
-                        .map_err(|_| item)?;
-
-                    let items = self
+                if resolution.valid_digest {
+                    let mut items = self
                         .index_client
-                        .search(&actual_url_info.url, Some(&actual_url_info.timestamp))
+                        .search(&resolution.url, Some(&resolution.timestamp))
                         .await
                         .map_err(|_| item)?;
 
-                    let actual_item = items.into_iter().next().ok_or(item)?;
+                    let actual_item = items.pop().ok_or(item)?;
 
                     let output =
                         File::create(self.base.join("data").join(format!("{}.gz", item.digest)))
@@ -163,7 +150,7 @@ impl Session {
                     let mut gz = GzBuilder::new()
                         .filename(item.make_filename())
                         .write(output, Compression::default());
-                    gz.write_all(&content).map_err(|_| item)?;
+                    gz.write_all(&resolution.content).map_err(|_| item)?;
                     gz.finish().map_err(|_| item)?;
 
                     Ok(actual_item)
