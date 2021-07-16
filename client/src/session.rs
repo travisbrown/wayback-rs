@@ -121,6 +121,8 @@ impl Session {
 
         items.retain(|item| digests.remove(&item.digest));
 
+        println!("Resolving {} items", items.len());
+
         let results = futures::stream::iter(items.iter())
             .map(|item| async move {
                 println!("Resolving: {}", item.url);
@@ -206,6 +208,8 @@ impl Session {
         }
 
         items.retain(|item| digests.remove(&item.digest));
+
+        println!("Downloading {} items", items.len());
 
         let results = futures::stream::iter(items)
             .map(|item| async {

@@ -120,7 +120,11 @@ impl Downloader {
                     .map(str::to_string)
                 {
                     Some(location) => {
-                        let guess = super::redirect::guess_redirect_content(&location);
+                        let info = location
+                            .parse::<super::item::UrlInfo>()
+                            .map_err(|_| Error::UnexpectedRedirectUrl(location))?;
+
+                        let guess = super::redirect::guess_redirect_content(&info.url);
                         let mut guess_bytes = guess.as_bytes();
                         let guess_digest = super::digest::compute_digest(&mut guess_bytes)?;
 
@@ -130,8 +134,9 @@ impl Downloader {
                         let content = if guess_digest == expected_digest {
                             Bytes::from(guess)
                         } else {
+                            println!("Invalid guess, re-requesting");
                             let direct_bytes =
-                                self.client.head(&initial_url).send().await?.bytes().await?;
+                                self.client.get(&initial_url).send().await?.bytes().await?;
                             let direct_digest =
                                 super::digest::compute_digest(&mut direct_bytes.clone().reader())?;
                             valid_initial_content = false;
@@ -139,10 +144,6 @@ impl Downloader {
 
                             direct_bytes
                         };
-
-                        let info = location
-                            .parse::<super::item::UrlInfo>()
-                            .map_err(|_| Error::UnexpectedRedirectUrl(location))?;
 
                         let actual_url = self
                             .direct_resolve_redirect(&info.url, &info.timestamp)
