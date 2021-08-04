@@ -67,7 +67,7 @@ impl Session {
         query_log.write_all(queries.join("\n").as_bytes())?;
 
         let mut items: Vec<Item> = futures::stream::iter(queries.iter())
-            .map(|query| Ok(self.index_client.search(query, None)))
+            .map(|query| Ok(self.index_client.search(query, None, None)))
             .try_buffer_unordered(self.parallelism)
             .map_ok(|items| {
                 futures::stream::iter(items).map(|item| {
@@ -140,7 +140,7 @@ impl Session {
                 if resolution.valid_digest {
                     let mut items = self
                         .index_client
-                        .search(&resolution.url, Some(&resolution.timestamp))
+                        .search(&resolution.url, Some(&resolution.timestamp), None)
                         .await
                         .map_err(|_| item)?;
 

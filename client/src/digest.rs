@@ -5,6 +5,25 @@ use std::io::BufWriter;
 use std::io::Read;
 use std::path::Path;
 
+pub fn string_to_bytes(digest: &str) -> Option<[u8; 20]> {
+    if digest.len() == 32 {
+        let mut output = [0; 20];
+        let count = BASE32.decode_mut(digest.as_bytes(), &mut output).ok()?;
+
+        if count == 20 {
+            Some(output)
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+}
+
+pub fn bytes_to_string(bytes: &[u8; 20]) -> String {
+    BASE32.encode(bytes)
+}
+
 pub fn compute_digest<R: Read>(input: &mut R) -> std::io::Result<String> {
     let sha1 = Sha1::new();
 
@@ -54,5 +73,15 @@ mod tests {
         let mut reader = std::io::BufReader::new(std::fs::File::open(path).unwrap());
 
         assert_eq!(super::compute_digest(&mut reader).unwrap(), digest);
+    }
+
+    #[test]
+    fn round_trip() {
+        let digest = "ZHYT52YPEOCHJD5FZINSDYXGQZI22WJ4";
+
+        let bytes = super::string_to_bytes(&digest).unwrap();
+        let string = super::bytes_to_string(&bytes);
+
+        assert_eq!(digest, string);
     }
 }
