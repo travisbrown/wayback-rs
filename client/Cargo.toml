@@ -36,4 +36,4 @@ tryhard = "0.4"
 [dependencies.rocksdb]
 default-features = false
 features = ["lz4"]
-version = "0.16"
+version = "0.17"

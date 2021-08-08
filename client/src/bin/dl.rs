@@ -1,9 +1,5 @@
 use clap::{crate_authors, crate_version, Clap};
-use futures::{StreamExt, TryStreamExt};
-use indicatif::{ProgressBar, ProgressStyle};
 use simplelog::LevelFilter;
-use std::io::Read;
-use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

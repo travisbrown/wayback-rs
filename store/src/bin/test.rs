@@ -1,7 +1,5 @@
 use clap::{crate_authors, crate_version, Clap};
-use futures::TryStreamExt;
 use simplelog::LevelFilter;
-use std::io::Read;
 use wayback_store::valid::ValidStore;
 
 #[tokio::main]
@@ -20,7 +18,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .take(10).collect::<wayback_store::valid::Result<Vec<_>>>()?
     );*/
     store
-        .paths_for_prefix(&opts.prefix.unwrap_or("".to_string()))
+        .paths_for_prefix(&opts.prefix.unwrap_or_else(|| "".to_string()))
         .for_each(|p| println!("{}", p.unwrap().0));
 
     Ok(())

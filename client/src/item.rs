@@ -133,7 +133,7 @@ impl Item {
         status: &str,
     ) -> Result<Item, Error> {
         let archived_at =
-            NaiveDateTime::parse_from_str(&timestamp, Item::DATE_FMT).map_err(|_| {
+            NaiveDateTime::parse_from_str(timestamp, Item::DATE_FMT).map_err(|_| {
                 Error::InvalidTimestamp {
                     value: timestamp.to_string(),
                 }
