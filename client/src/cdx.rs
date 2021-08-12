@@ -12,6 +12,8 @@ pub enum Error {
     HttpClientError(#[from] reqwest::Error),
     #[error("JSON decoding error: {0}")]
     JsonError(#[from] serde_json::Error),
+    #[error("Blocked query: {0}")]
+    BlockedQuery(String),
 }
 
 pub struct IndexClient {
@@ -24,6 +26,8 @@ impl IndexClient {
     const DEFAULT_CDX_BASE: &'static str = "http://web.archive.org/cdx/search/cdx";
     const CDX_OPTIONS: &'static str =
         "&output=json&fl=original,timestamp,digest,mimetype,length,statuscode";
+    const BLOCKED_SITE_ERROR_MESSAGE: &'static str =
+        "org.archive.util.io.RuntimeIOException: org.archive.wayback.exception.AdministrativeAccessControlException: Blocked Site Error\n";
 
     pub fn new(base: String) -> Self {
         Self {
@@ -77,15 +81,14 @@ impl IndexClient {
         }
 
         let query_url = format!("{}?url={}{}{}", self.base, query, filter, Self::CDX_OPTIONS);
-        let rows = self
-            .underlying
-            .get(&query_url)
-            .send()
-            .await?
-            .json::<Vec<Vec<String>>>()
-            .await?;
+        let contents = self.underlying.get(&query_url).send().await?.text().await?;
 
-        Self::decode_rows(rows)
+        if contents == Self::BLOCKED_SITE_ERROR_MESSAGE {
+            Err(Error::BlockedQuery(query.to_string()))
+        } else {
+            let rows = serde_json::from_str(&contents)?;
+            Self::decode_rows(rows)
+        }
     }
 }
 

@@ -64,21 +64,35 @@ impl Session {
     pub async fn save_cdx_results(&self, queries: &[String]) -> Result<(), Error> {
         create_dir_all(&self.base)?;
         let mut query_log = File::create(self.base.join("queries.txt"))?;
-        query_log.write_all(queries.join("\n").as_bytes())?;
+        query_log.write_all(format!("{}\n", queries.join("\n")).as_bytes())?;
 
-        let mut items: Vec<Item> = futures::stream::iter(queries.iter())
+        let results: Vec<Result<Vec<Item>, String>> = futures::stream::iter(queries.iter())
             .map(|query| Ok(self.index_client.search(query, None, None)))
             .try_buffer_unordered(self.parallelism)
-            .map_ok(|items| {
-                futures::stream::iter(items).map(|item| {
-                    let res: Result<Item, Error> = Ok(item);
-                    res
-                })
+            .map(|result| match result {
+                Err(cdx::Error::BlockedQuery(query)) => Ok(Err(query)),
+                Err(other) => Err(other),
+                Ok(items) => Ok(Ok(items)),
             })
-            .try_flatten()
             .err_into::<Error>()
             .try_collect()
             .await?;
+
+        let mut blocked: Vec<String> = vec![];
+        let mut items: Vec<Item> = Vec::with_capacity(results.len());
+
+        for result in results {
+            match result {
+                Ok(batch) => items.extend(batch),
+                Err(query) => blocked.push(query),
+            }
+        }
+
+        if !blocked.is_empty() {
+            let mut blocked_log = File::create(self.base.join("blocked.txt"))?;
+            blocked.sort();
+            blocked_log.write_all(format!("{}\n", blocked.join("\n")).as_bytes())?;
+        }
 
         items.sort();
         items.dedup();
