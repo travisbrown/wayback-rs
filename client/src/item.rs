@@ -124,6 +124,12 @@ impl Item {
         )
     }
 
+    pub fn with_digest(&self, digest: &str) -> Item {
+        let mut res = self.clone();
+        res.digest = digest.to_string();
+        res
+    }
+
     fn parse(
         url: &str,
         timestamp: &str,

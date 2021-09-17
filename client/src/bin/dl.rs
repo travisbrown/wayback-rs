@@ -14,11 +14,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if opts.resume {
         session.resolve_redirects().await?;
-        let (success_count, skipped_count, error_count) = session.download_items().await?;
+        let (success_count, invalid_count, skipped_count, error_count) =
+            session.download_items().await?;
 
         println!(
-            "Successfully downloaded: {}\nSkipped: {}\nFailed: {}",
-            success_count, skipped_count, error_count
+            "Successfully downloaded: {}\nDownloaded by invalid hash: {}\nSkipped: {}\nFailed: {}",
+            success_count, invalid_count, skipped_count, error_count
         );
     } else if let Some(query) = opts.query {
         let queries = query
@@ -27,11 +28,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .collect::<Vec<_>>();
         session.save_cdx_results(&queries).await?;
         session.resolve_redirects().await?;
-        let (success_count, skipped_count, error_count) = session.download_items().await?;
+        let (success_count, invalid_count, skipped_count, error_count) =
+            session.download_items().await?;
 
         println!(
-            "Successfully downloaded: {}\nSkipped: {}\nFailed: {}",
-            success_count, skipped_count, error_count
+            "Successfully downloaded: {}\nDownloaded by invalid hash: {}\nSkipped: {}\nFailed: {}",
+            success_count, invalid_count, skipped_count, error_count
         );
     }
 

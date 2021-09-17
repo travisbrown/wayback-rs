@@ -121,6 +121,7 @@ impl Session {
         items.sort();
 
         create_dir_all(&self.base.join("data"))?;
+        create_dir_all(&self.base.join("invalid"))?;
 
         let mut digests = HashSet::new();
 
@@ -200,7 +201,7 @@ impl Session {
         Ok(())
     }
 
-    pub async fn download_items(&self) -> Result<(usize, usize, usize), Error> {
+    pub async fn download_items(&self) -> Result<(usize, usize, usize, usize), Error> {
         let originals_file = File::open(self.base.join("originals.csv"))?;
         let mut items = Self::read_csv(originals_file)?;
 
@@ -233,9 +234,12 @@ impl Session {
                     .await
                     .map_err(|_| item.clone())?;
 
-                if compute_digest(&mut content.clone().reader()).unwrap() == item.digest {
+                let expected = item.digest.clone();
+                let computed = compute_digest(&mut content.clone().reader()).unwrap();
+
+                if computed == expected {
                     let output =
-                        File::create(self.base.join("data").join(format!("{}.gz", item.digest)))
+                        File::create(self.base.join("data").join(format!("{}.gz", expected)))
                             .map_err(|_| item.clone())?;
                     let mut gz = GzBuilder::new()
                         .filename(item.make_filename())
@@ -243,24 +247,42 @@ impl Session {
                     gz.write_all(&content).map_err(|_| item.clone())?;
                     gz.finish().map_err(|_| item)?;
 
-                    Ok(())
+                    Ok(None)
                 } else {
-                    Err(item)
+                    let output =
+                        File::create(self.base.join("invalid").join(format!("{}.gz", computed)))
+                            .map_err(|_| item.clone())?;
+                    let mut gz = GzBuilder::new()
+                        .filename(item.make_filename())
+                        .write(output, Compression::default());
+                    gz.write_all(&content).map_err(|_| item.clone())?;
+                    gz.finish().map_err(|_| item)?;
+
+                    Ok(Some((expected, computed)))
                 }
             })
             .buffer_unordered(self.parallelism)
-            .collect::<Vec<_>>()
+            .collect::<Vec<Result<Option<(String, String)>, Item>>>()
             .await;
 
         let error_log = File::create(self.base.join("errors").join("items.csv"))?;
         let mut error_csv = WriterBuilder::new().from_writer(error_log);
+
+        let invalid_log = File::create(self.base.join("errors").join("invalid.csv"))?;
+        let mut invalid_csv = WriterBuilder::new().from_writer(invalid_log);
+
         let mut success_count = 0;
+        let mut invalid_count = 0;
         let mut error_count = 0;
 
         for result in results {
             match result {
-                Ok(_) => {
+                Ok(None) => {
                     success_count += 1;
+                }
+                Ok(Some((expected, computed))) => {
+                    invalid_count += 1;
+                    invalid_csv.write_record(vec![expected, computed])?;
                 }
                 Err(item) => {
                     error_count += 1;
@@ -271,7 +293,8 @@ impl Session {
 
         Ok((
             success_count,
-            total_count - success_count - error_count,
+            invalid_count,
+            total_count - success_count - error_count - invalid_count,
             error_count,
         ))
     }
