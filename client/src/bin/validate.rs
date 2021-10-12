@@ -1,5 +1,5 @@
 use clap::{crate_authors, crate_version, Clap};
-use futures::{lock::Mutex, FutureExt, StreamExt, TryFutureExt, TryStreamExt};
+use futures::{lock::Mutex, TryFutureExt, TryStreamExt};
 use indicatif::{ProgressBar, ProgressStyle};
 use simplelog::LevelFilter;
 use std::fs::File;
@@ -19,7 +19,7 @@ async fn main() -> Result<(), Error> {
     let _ = init_logging(opts.verbose);
 
     let output = File::create(opts.output)?;
-    let mut output = Mutex::new(LineWriter::new(output));
+    let output = Mutex::new(LineWriter::new(output));
 
     let files = std::fs::read_dir(opts.dir)?.collect::<Vec<_>>();
 
@@ -31,12 +31,12 @@ async fn main() -> Result<(), Error> {
     futures::stream::iter(files)
         .map_err(Error::from)
         .map_ok(|entry| {
-            let path = entry.path().clone();
+            let path = entry.path();
             let pb = pb.clone();
             tokio::spawn(async move {
                 let digest = path.file_stem().unwrap().to_string_lossy();
                 let r = std::fs::File::open(&path)
-                    .and_then(|mut file| Ok(wayback_client::digest::compute_digest_gz(&mut file)?));
+                    .and_then(|mut file| wayback_client::digest::compute_digest_gz(&mut file));
 
                 let result = match r {
                     Ok(value) if value == digest => None,
@@ -63,7 +63,7 @@ async fn main() -> Result<(), Error> {
             output
                 .lock()
                 .await
-                .write_all(format!("{}\n", message).as_bytes());
+                .write_all(format!("{}\n", message).as_bytes())?;
             pb.println(message);
 
             Ok(())
