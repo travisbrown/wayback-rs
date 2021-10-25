@@ -9,7 +9,7 @@ categories = ["api-bindings"]
 homepage = "https://github.com/travisbrown/wayback-rs"
 repository = "https://github.com/travisbrown/wayback-rs"
 readme = "README.md"
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 async-std = "1.9"

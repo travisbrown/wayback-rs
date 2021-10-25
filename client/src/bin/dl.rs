@@ -1,4 +1,4 @@
-use clap::{crate_authors, crate_version, Clap};
+use clap::{crate_authors, crate_version, Parser};
 use simplelog::LevelFilter;
 
 #[tokio::main]
@@ -94,7 +94,7 @@ fn expand_twitter_queries(screen_name: &str) -> Vec<String> {
     ]
 }
 
-#[derive(Clap)]
+#[derive(Parser)]
 #[clap(name = "test", version = crate_version!(), author = crate_authors!())]
 struct Opts {
     /// Level of verbosity

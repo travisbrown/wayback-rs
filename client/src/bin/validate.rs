@@ -1,4 +1,4 @@
-use clap::{crate_authors, crate_version, Clap};
+use clap::{crate_authors, crate_version, Parser};
 use futures::{lock::Mutex, TryFutureExt, TryStreamExt};
 use indicatif::{ProgressBar, ProgressStyle};
 use simplelog::LevelFilter;
@@ -40,7 +40,7 @@ async fn main() -> Result<(), Error> {
 
                 let result = match r {
                     Ok(value) if value == digest => None,
-                    Ok(value) => Some((path.into_boxed_path(), None)),
+                    Ok(_value) => Some((path.into_boxed_path(), None)),
                     Err(error) => Some((path.into_boxed_path(), Some(error))),
                 };
 
@@ -73,7 +73,7 @@ async fn main() -> Result<(), Error> {
     Ok(())
 }
 
-#[derive(Clap)]
+#[derive(Parser)]
 #[clap(name = "validate", version = crate_version!(), author = crate_authors!())]
 struct Opts {
     /// Level of verbosity

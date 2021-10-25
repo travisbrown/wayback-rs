@@ -5,7 +5,7 @@ use lazy_static::lazy_static;
 use sha1::{Digest, Sha1};
 use std::collections::HashSet;
 use std::fs::{read_dir, DirEntry, File};
-use std::io::{self, BufWriter, Read};
+use std::io::{self, BufReader, BufWriter, Read};
 use std::iter::once;
 use std::path::{Path, PathBuf};
 
@@ -252,6 +252,17 @@ impl ValidStore {
 
     pub fn lookup(&self, digest: &str) -> Option<Box<Path>> {
         self.location(digest).filter(|path| path.is_file())
+    }
+
+    pub fn extract_reader(
+        &self,
+        digest: &str,
+    ) -> Option<std::io::Result<BufReader<GzDecoder<File>>>> {
+        self.lookup(digest).map(|path| {
+            let file = File::open(path)?;
+
+            Ok(BufReader::new(GzDecoder::new(file)))
+        })
     }
 
     pub fn extract(&self, digest: &str) -> Option<std::io::Result<String>> {
