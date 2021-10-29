@@ -1,0 +1,6 @@
+[workspace]
+members = [
+  "client",
+  "store"
+]
+default-members = ["client", "store"]

@@ -1,0 +1,35 @@
+[package]
+name = "wayback-client"
+version = "0.1.0"
+authors = ["Travis Brown <travisrobertbrown@gmail.com>"]
+license = "MPL-2.0"
+description = "Tools for working with the Internet Archive's Wayback Machine"
+keywords = ["archive", "downloader", "wayback", "wayback-machine"]
+categories = ["api-bindings"]
+homepage = "https://github.com/travisbrown/wayback-rs"
+repository = "https://github.com/travisbrown/wayback-rs"
+readme = "README.md"
+edition = "2018"
+
+[dependencies]
+async-std = "1.9"
+bytes = "1.1"
+chrono = "0.4"
+clap = "3.0.0-beta.5"
+csv = "1.1"
+data-encoding = "2.3"
+fantoccini = { version = "0.17", features = [ "rustls-tls" ] }
+flate2 = "1.0"
+futures = "0.3"
+futures-locks = "0.6.0"
+indicatif = "0.16"
+lazy_static = "1.4"
+log = "0.4"
+regex = "1.5"
+reqwest = { version = "0.11.6", features = [ "json" ] }
+serde_json = "1.0"
+sha-1 = "0.9"
+simplelog = "0.10"
+thiserror = "1.0"
+tokio = { version = "1.12", features = ["macros", "rt-multi-thread"] }
+tryhard = "0.4"
