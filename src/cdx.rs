@@ -196,7 +196,7 @@ mod tests {
 
     #[test]
     fn load_json() {
-        let file = File::open("../examples/wayback/cdx-result.json").unwrap();
+        let file = File::open("examples/wayback/cdx-result.json").unwrap();
         let result = IndexClient::load_json(file).unwrap();
 
         assert_eq!(result.len(), 37);

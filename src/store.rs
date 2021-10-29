@@ -1,11 +1,10 @@
-use data_encoding::BASE32;
+use super::digest::compute_digest_gz;
 use flate2::read::GzDecoder;
 use futures::{stream::LocalBoxStream, FutureExt, Stream, TryFutureExt, TryStreamExt};
 use lazy_static::lazy_static;
-use sha1::{Digest, Sha1};
 use std::collections::HashSet;
 use std::fs::{read_dir, DirEntry, File};
-use std::io::{self, BufReader, BufWriter, Read};
+use std::io::{self, BufReader, Read};
 use std::iter::once;
 use std::path::{Path, PathBuf};
 
@@ -340,22 +339,4 @@ impl ValidStore {
             })
         }
     }
-}
-
-fn compute_digest<R: Read>(input: &mut R) -> std::io::Result<String> {
-    let sha1 = Sha1::new();
-
-    let mut buffered = BufWriter::new(sha1);
-    std::io::copy(input, &mut buffered)?;
-
-    let result = buffered.into_inner()?.finalize();
-
-    let mut output = String::new();
-    BASE32.encode_append(&result, &mut output);
-
-    Ok(output)
-}
-
-fn compute_digest_gz<R: Read>(input: &mut R) -> std::io::Result<String> {
-    compute_digest(&mut GzDecoder::new(input))
 }
