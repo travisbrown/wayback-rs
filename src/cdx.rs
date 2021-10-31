@@ -95,8 +95,9 @@ impl IndexClient {
         &'a self,
         query: &'a str,
         limit: usize,
+        resume_key: Option<String>,
     ) -> impl Stream<Item = Result<Item, Error>> + 'a {
-        futures::stream::try_unfold(Some(None), move |resume_key| async move {
+        futures::stream::try_unfold(Some(resume_key), move |resume_key| async move {
             let next = match resume_key {
                 Some(key) => {
                     let (items, resume_key) =
