@@ -1,5 +1,6 @@
 use super::util::{parse_timestamp, to_timestamp};
 use chrono::NaiveDateTime;
+use csv::StringRecord;
 use std::str::FromStr;
 use thiserror::Error;
 
@@ -163,7 +164,7 @@ impl Item {
         ))
     }
 
-    pub fn parse_optional_record(
+    pub fn parse_optional(
         url: Option<&str>,
         timestamp: Option<&str>,
         digest: Option<&str>,
@@ -178,6 +179,17 @@ impl Item {
             mime_type.ok_or(Error::MissingMimeType)?,
             length.ok_or(Error::MissingLength)?,
             status.ok_or(Error::MissingStatus)?,
+        )
+    }
+
+    pub fn from_record(record: &StringRecord) -> Result<Item, Error> {
+        Self::parse(
+            record.get(0).ok_or(Error::MissingUrl)?,
+            record.get(1).ok_or(Error::MissingTimestamp)?,
+            record.get(2).ok_or(Error::MissingDigest)?,
+            record.get(3).ok_or(Error::MissingMimeType)?,
+            record.get(4).ok_or(Error::MissingLength)?,
+            record.get(5).ok_or(Error::MissingStatus)?,
         )
     }
 

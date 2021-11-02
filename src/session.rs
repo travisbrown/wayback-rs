@@ -306,14 +306,7 @@ impl Session {
             .records()
             .map(|record| {
                 let row = record?;
-                Ok(Item::parse_optional_record(
-                    row.get(0),
-                    row.get(1),
-                    row.get(2),
-                    row.get(3),
-                    row.get(4),
-                    row.get(5),
-                )?)
+                Ok(Item::from_record(&row)?)
             })
             .collect()
     }
