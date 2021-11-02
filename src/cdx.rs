@@ -38,6 +38,9 @@ impl Retryable for Error {
     fn custom_retry_policy(&self) -> Option<RetryPolicy> {
         match self {
             Error::HttpClientError(_) => Some(RetryPolicy::Delay(Duration::from_secs(30))),
+            // The CDX server occasionally returns an empty body that results in a JSON parsing
+            // failure.
+            Error::JsonError(_) => Some(RetryPolicy::Delay(Duration::from_secs(30))),
             _ => Some(RetryPolicy::Break),
         }
     }
