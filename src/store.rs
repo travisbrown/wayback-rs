@@ -1,6 +1,6 @@
 use super::digest::compute_digest_gz;
 use flate2::read::GzDecoder;
-use futures::{stream::LocalBoxStream, FutureExt, Stream, TryFutureExt, TryStreamExt};
+use futures::{FutureExt, Stream, TryStreamExt};
 use lazy_static::lazy_static;
 use std::collections::HashSet;
 use std::fs::{read_dir, DirEntry, File};
@@ -144,56 +144,6 @@ impl ValidStore {
                     Self::emit_error(Error::InvalidDigest(prefix.to_string()))
                 }
             }
-        }
-    }
-
-    pub fn paths_for_prefix_stream(
-        &self,
-        prefix: &str,
-    ) -> LocalBoxStream<Result<(String, PathBuf)>> {
-        match prefix.chars().next() {
-            Some(first_char) => {
-                if Self::is_valid_prefix(prefix) {
-                    let prefix = prefix.to_string();
-                    let path = self.base.join(&first_char.to_string());
-                    Box::pin(
-                        futures::stream::once(
-                            async move { async_std::fs::read_dir(&path).await }.err_into::<Error>(),
-                        )
-                        .map_ok(move |entries| {
-                            let p = prefix.clone();
-                            entries.err_into::<Error>().try_filter_map(move |entry| {
-                                let path = entry.path();
-
-                                match path.file_stem().and_then(|os| os.to_str()) {
-                                    None => futures::future::err(Error::Unexpected {
-                                        path: Into::<PathBuf>::into(path).into_boxed_path(),
-                                    }),
-                                    Some(name) => {
-                                        if name.starts_with(&p) {
-                                            futures::future::ok(Some((
-                                                name.to_string(),
-                                                Into::<PathBuf>::into(path),
-                                            )))
-                                        } else {
-                                            futures::future::err(Error::Unexpected {
-                                                path: Into::<PathBuf>::into(path).into_boxed_path(),
-                                            })
-                                        }
-                                    }
-                                }
-                            })
-                        })
-                        .try_flatten(),
-                    )
-                } else {
-                    Box::pin(futures::stream::once(futures::future::err(
-                        Error::InvalidDigest(prefix.to_string()),
-                    )))
-                        as std::pin::Pin<Box<dyn Stream<Item = Result<(String, PathBuf)>>>>
-                }
-            }
-            None => todo![],
         }
     }
 
