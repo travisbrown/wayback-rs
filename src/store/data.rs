@@ -1,4 +1,4 @@
-use super::digest::compute_digest_gz;
+use crate::digest::compute_digest_gz;
 use flate2::read::GzDecoder;
 use futures::{FutureExt, Stream, TryStreamExt};
 use lazy_static::lazy_static;

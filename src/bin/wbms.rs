@@ -1,5 +1,5 @@
 use clap::{crate_authors, crate_version, Parser};
-use wayback_rs::store::Store;
+use wayback_rs::store::data::Store;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
