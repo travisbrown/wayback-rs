@@ -86,20 +86,21 @@ impl ValidStore {
             .try_buffer_unordered(n)
     }
 
+    fn emit_error<T: 'static, E: Into<Error>>(e: E) -> Box<dyn Iterator<Item = Result<T>>> {
+        Box::new(once(Err(e.into())))
+    }
+
     pub fn paths(&self) -> impl Iterator<Item = Result<(String, PathBuf)>> {
         match read_dir(&self.base).and_then(|it| it.collect::<std::result::Result<Vec<_>, _>>()) {
-            Err(error) => Box::new(once(Err(error.into())))
-                as Box<dyn Iterator<Item = Result<(String, PathBuf)>>>,
+            Err(error) => Self::emit_error(error),
             Ok(mut dirs) => {
                 dirs.sort_by_key(|entry| entry.file_name());
                 Box::new(
                     dirs.into_iter()
                         .flat_map(|entry| match Self::check_dir_entry(&entry) {
-                            Err(error) => Box::new(once(Err(error)))
-                                as Box<dyn Iterator<Item = Result<(String, PathBuf)>>>,
+                            Err(error) => Self::emit_error(error),
                             Ok(first) => match read_dir(entry.path()) {
-                                Err(error) => Box::new(once(Err(error.into())))
-                                    as Box<dyn Iterator<Item = Result<(String, PathBuf)>>>,
+                                Err(error) => Self::emit_error(error),
                                 Ok(files) => Box::new(files.map(move |result| {
                                     result
                                         .map_err(Error::from)
@@ -122,8 +123,7 @@ impl ValidStore {
                 if Self::is_valid_prefix(prefix) {
                     let first = first_char.to_string();
                     match read_dir(self.base.join(&first)) {
-                        Err(error) => Box::new(once(Err(error.into())))
-                            as Box<dyn Iterator<Item = Result<(String, PathBuf)>>>,
+                        Err(error) => Self::emit_error(error),
                         Ok(files) => {
                             let p = prefix.to_string();
                             Box::new(
@@ -141,8 +141,7 @@ impl ValidStore {
                         }
                     }
                 } else {
-                    Box::new(once(Err(Error::InvalidDigest(prefix.to_string()))))
-                        as Box<dyn Iterator<Item = Result<(String, PathBuf)>>>
+                    Self::emit_error(Error::InvalidDigest(prefix.to_string()))
                 }
             }
         }
