@@ -33,6 +33,10 @@ lazy_static! {
     };
 }
 
+fn is_valid_char(c: char) -> bool {
+    ('2'..='7').contains(&c) || ('A'..='Z').contains(&c)
+}
+
 pub struct ValidStore {
     base: Box<Path>,
 }
@@ -287,11 +291,11 @@ impl ValidStore {
     }
 
     fn is_valid_digest(candidate: &str) -> bool {
-        candidate.len() == 32 && Self::is_valid_prefix(candidate)
+        candidate.len() == 32 && candidate.chars().all(is_valid_char)
     }
 
     fn is_valid_prefix(candidate: &str) -> bool {
-        candidate.len() <= 32 && candidate.chars().all(|c| NAMES.contains(&c.to_string()))
+        candidate.len() <= 32 && candidate.chars().all(is_valid_char)
     }
 
     fn check_file_entry(first: &str, entry: &DirEntry) -> Result<(String, PathBuf)> {
