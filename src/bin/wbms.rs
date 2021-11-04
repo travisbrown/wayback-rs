@@ -1,5 +1,5 @@
 use clap::{crate_authors, crate_version, Parser};
-use wayback_rs::store::ValidStore;
+use wayback_rs::store::Store;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -7,7 +7,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     match opts.command {
         SubCommand::Digests { base, prefix } => {
-            let store = ValidStore::new(base);
+            let store = Store::new(base);
 
             for res in store.paths_for_prefix(&prefix.unwrap_or_else(|| "".to_string())) {
                 let (digest, _) = res?;

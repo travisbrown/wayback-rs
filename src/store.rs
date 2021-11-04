@@ -37,13 +37,14 @@ fn is_valid_char(c: char) -> bool {
     ('2'..='7').contains(&c) || ('A'..='Z').contains(&c)
 }
 
-pub struct ValidStore {
+/// A content-addressable store for compressed Wayback Machine pages.
+pub struct Store {
     base: Box<Path>,
 }
 
-impl ValidStore {
+impl Store {
     pub fn new<P: AsRef<Path>>(path: P) -> Self {
-        ValidStore {
+        Store {
             base: path.as_ref().to_path_buf().into_boxed_path(),
         }
     }
@@ -55,7 +56,7 @@ impl ValidStore {
             std::fs::create_dir_all(path.join(name))?;
         }
 
-        Ok(ValidStore {
+        Ok(Store {
             base: path.to_path_buf().into_boxed_path(),
         })
     }
