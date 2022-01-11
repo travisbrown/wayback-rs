@@ -1,4 +1,4 @@
-use clap::{crate_authors, crate_version, Parser};
+use clap::Parser;
 use wayback_rs::store::data::Store;
 
 #[tokio::main]
@@ -20,7 +20,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[derive(Parser)]
-#[clap(name = "wbms", version = crate_version!(), author = crate_authors!())]
+#[clap(name = "wbms", version, author)]
 struct Opts {
     /// Level of verbosity
     #[clap(short, long, parse(from_occurrences))]
