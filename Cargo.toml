@@ -33,3 +33,7 @@ simplelog = "0.11"
 thiserror = "1.0"
 tokio = { version = "1.12", features = ["macros", "rt-multi-thread"] }
 tryhard = "0.4"
+
+[dependencies.rusqlite]
+version = "0.26"
+features = ["bundled"]

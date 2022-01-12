@@ -1,6 +1,7 @@
 use chrono::naive::NaiveDateTime;
 
 mod retries;
+pub(crate) mod sqlite;
 pub use retries::{retry_future, Retryable};
 
 const DATE_FMT: &str = "%Y%m%d%H%M%S";

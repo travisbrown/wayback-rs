@@ -61,14 +61,14 @@ impl FromStr for UrlInfo {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Ord, PartialOrd)]
 /// Information about a single archived snapshot of a page.
 pub struct Item {
     pub url: String,
     pub archived_at: NaiveDateTime,
     pub digest: String,
     pub mime_type: String,
-    pub length: u64,
+    pub length: u32,
     pub status: Option<u16>,
 }
 
@@ -78,7 +78,7 @@ impl Item {
         archived_at: NaiveDateTime,
         digest: String,
         mime_type: String,
-        length: u64,
+        length: u32,
         status: Option<u16>,
     ) -> Item {
         Item {
@@ -141,7 +141,7 @@ impl Item {
             value: timestamp.to_string(),
         })?;
 
-        let length_parsed = length.parse::<u64>().map_err(|_| Error::InvalidLength {
+        let length_parsed = length.parse::<u32>().map_err(|_| Error::InvalidLength {
             value: length.to_string(),
         })?;
 
