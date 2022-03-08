@@ -1,6 +1,7 @@
 use super::{
     cdx::{self, IndexClient},
     digest::compute_digest,
+    downloader::Downloader,
     Item,
 };
 use bytes::Buf;
@@ -16,13 +17,15 @@ use std::path::{Path, PathBuf};
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     #[error("I/O error: {0:?}")]
-    IOError(#[from] std::io::Error),
+    Io(#[from] std::io::Error),
     #[error("CDX error: {0:?}")]
-    IndexClientError(#[from] cdx::Error),
+    IndexClient(#[from] cdx::Error),
+    #[error("HTTP client error: {0:?}")]
+    Client(#[from] reqwest::Error),
     #[error("CSV writing error: {0:?}")]
-    CsvError(#[from] csv::Error),
+    Csv(#[from] csv::Error),
     #[error("Item parsing error: {0:?}")]
-    ItemError(#[from] super::item::Error),
+    Item(#[from] super::item::Error),
 }
 
 pub struct Session {
@@ -30,7 +33,7 @@ pub struct Session {
     known_digests: Option<PathBuf>,
     parallelism: usize,
     index_client: IndexClient,
-    client: super::downloader::Downloader,
+    client: Downloader,
 }
 
 impl Session {
@@ -40,20 +43,20 @@ impl Session {
         base: P1,
         known_digests: Option<P2>,
         parallelism: usize,
-    ) -> Session {
-        Session {
+    ) -> Result<Session, Error> {
+        Ok(Session {
             base: base.as_ref().to_path_buf(),
             known_digests: known_digests.map(|path| path.as_ref().to_path_buf()),
             parallelism,
             index_client: IndexClient::default(),
-            client: super::downloader::Downloader::default(),
-        }
+            client: Downloader::new()?,
+        })
     }
 
     pub fn new_timestamped<P: AsRef<Path>>(
         known_digests: Option<P>,
         parallelism: usize,
-    ) -> Session {
+    ) -> Result<Session, Error> {
         Self::new(
             Utc::now().format(Self::TIMESTAMP_FMT).to_string(),
             known_digests,
@@ -136,11 +139,11 @@ impl Session {
 
         items.retain(|item| digests.remove(&item.digest));
 
-        println!("Resolving {} items", items.len());
+        log::info!("Resolving {} items", items.len());
 
         let results = futures::stream::iter(items.iter())
             .map(|item| async move {
-                println!("Resolving: {}", item.url);
+                log::info!("Resolving: {}", item.url);
                 (
                     item,
                     self.client
@@ -224,7 +227,7 @@ impl Session {
 
         items.retain(|item| digests.remove(&item.digest));
 
-        println!("Downloading {} items", items.len());
+        log::info!("Downloading {} items", items.len());
 
         let results = futures::stream::iter(items)
             .map(|item| async {
