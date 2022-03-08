@@ -82,7 +82,7 @@ where
     E: ?Sized,
 {
     delay: Duration,
-    ph: PhantomData<E>,
+    _error: PhantomData<E>,
 }
 
 impl<'a, E: Retryable> BackoffStrategy<'a, E> for ErrorBackoff<E> {
@@ -119,7 +119,7 @@ pub trait Retryable {
     fn new_backoff() -> ErrorBackoff<Self> {
         ErrorBackoff {
             delay: Self::default_initial_delay(),
-            ph: PhantomData,
+            _error: PhantomData,
         }
     }
 

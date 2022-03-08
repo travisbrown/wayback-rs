@@ -8,12 +8,17 @@ use std::time::Duration;
 use thiserror::Error;
 use tryhard::RetryPolicy;
 
+const MAX_RETRIES: u32 = 7;
+const RETRY_INITIAL_DELAY_DURATION: Duration = Duration::from_millis(250);
+const BAD_GATEWAY_DELAY_DURATION: Duration = Duration::from_secs(30);
+const TCP_KEEPALIVE_DURATION: Duration = Duration::from_secs(20);
+
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("I/O error")]
-    IOError(#[from] std::io::Error),
+    Io(#[from] std::io::Error),
     #[error("HTTP client error: {0:?}")]
-    ClientError(#[from] reqwest::Error),
+    Client(#[from] reqwest::Error),
     #[error("Unexpected redirect: {0:?}")]
     UnexpectedRedirect(Option<String>),
     #[error("Unexpected redirect URL: {0:?}")]
@@ -24,7 +29,7 @@ pub enum Error {
 
 impl Retryable for Error {
     fn max_retries() -> u32 {
-        7
+        MAX_RETRIES
     }
 
     fn log_level() -> Option<log::Level> {
@@ -32,16 +37,16 @@ impl Retryable for Error {
     }
 
     fn default_initial_delay() -> Duration {
-        Duration::from_millis(250)
+        RETRY_INITIAL_DELAY_DURATION
     }
 
     fn custom_retry_policy(&self) -> Option<RetryPolicy> {
         match self {
-            Error::IOError(_) => None,
-            Error::ClientError(_) => None,
+            Error::Io(_) => None,
+            Error::Client(_) => None,
             // 502 (often Too Many Requests)
             Error::UnexpectedStatus(StatusCode::BAD_GATEWAY) => {
-                Some(RetryPolicy::Delay(Duration::from_secs(30)))
+                Some(RetryPolicy::Delay(BAD_GATEWAY_DELAY_DURATION))
             }
             _ => Some(RetryPolicy::Break),
         }
@@ -59,29 +64,17 @@ pub struct RedirectResolution {
 #[derive(Clone)]
 pub struct Downloader {
     client: Client,
-    retry_count: usize,
-    retry_delay: Duration,
-}
-
-impl Default for Downloader {
-    fn default() -> Downloader {
-        Downloader::new(7, Duration::from_millis(250)).unwrap()
-    }
 }
 
 impl Downloader {
-    const TCP_KEEPALIVE_SECS: u64 = 20;
-
-    pub fn new(retry_count: usize, retry_delay: Duration) -> reqwest::Result<Self> {
-        let tcp_keepalive = Some(Duration::from_secs(Self::TCP_KEEPALIVE_SECS));
+    pub fn new() -> reqwest::Result<Self> {
+        let tcp_keepalive = Some(TCP_KEEPALIVE_DURATION);
 
         Ok(Self {
             client: Client::builder()
                 .tcp_keepalive(tcp_keepalive)
                 .redirect(redirect::Policy::none())
                 .build()?,
-            retry_count,
-            retry_delay,
         })
     }
 
@@ -100,7 +93,7 @@ impl Downloader {
         timestamp: &str,
         expected_digest: &str,
     ) -> Result<RedirectResolution, Error> {
-        let initial_url = Downloader::wayback_url(url, timestamp, true);
+        let initial_url = Self::wayback_url(url, timestamp, true);
         let initial_response = self.client.head(&initial_url).send().await?;
 
         match initial_response.status() {
@@ -126,7 +119,7 @@ impl Downloader {
                         let content = if guess_digest == expected_digest {
                             Bytes::from(guess)
                         } else {
-                            println!("Invalid guess, re-requesting");
+                            log::warn!("Invalid guess, re-requesting");
                             let direct_bytes =
                                 self.client.get(&initial_url).send().await?.bytes().await?;
                             let direct_digest =
@@ -163,7 +156,7 @@ impl Downloader {
     async fn direct_resolve_redirect(&self, url: &str, timestamp: &str) -> Result<String, Error> {
         let response = self
             .client
-            .head(Downloader::wayback_url(url, timestamp, true))
+            .head(Self::wayback_url(url, timestamp, true))
             .send()
             .await?;
 
@@ -195,7 +188,7 @@ impl Downloader {
     ) -> Result<Bytes, Error> {
         let response = self
             .client
-            .get(Downloader::wayback_url(url, timestamp, original))
+            .get(Self::wayback_url(url, timestamp, original))
             .send()
             .await?;
 
