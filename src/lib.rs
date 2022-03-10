@@ -3,6 +3,7 @@ pub mod cdx;
 pub mod digest;
 pub mod downloader;
 pub mod item;
+pub mod parquet;
 pub mod session;
 pub mod store;
 pub mod util;

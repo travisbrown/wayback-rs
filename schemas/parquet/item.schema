@@ -1,0 +1,8 @@
+message item {
+    REQUIRED BYTE_ARRAY url (UTF8);
+    REQUIRED INT32 archived_at;
+    REQUIRED BYTE_ARRAY digest (UTF8);
+    REQUIRED BYTE_ARRAY mime_type (UTF8);
+    REQUIRED INT32 length;
+    OPTIONAL INT32 status;
+}
