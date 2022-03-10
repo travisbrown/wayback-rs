@@ -5,7 +5,6 @@ use super::{
 use bytes::{Buf, Bytes};
 use reqwest::{header::LOCATION, redirect, Client, StatusCode};
 use std::time::Duration;
-use thiserror::Error;
 use tryhard::RetryPolicy;
 
 const MAX_RETRIES: u32 = 7;
@@ -13,7 +12,7 @@ const RETRY_INITIAL_DELAY_DURATION: Duration = Duration::from_millis(250);
 const BAD_GATEWAY_DELAY_DURATION: Duration = Duration::from_secs(30);
 const TCP_KEEPALIVE_DURATION: Duration = Duration::from_secs(20);
 
-#[derive(Error, Debug)]
+#[derive(thiserror::Error, Debug)]
 pub enum Error {
     #[error("I/O error")]
     Io(#[from] std::io::Error),

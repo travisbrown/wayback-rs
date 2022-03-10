@@ -1,9 +1,8 @@
 use super::util::{parse_timestamp, to_timestamp};
 use chrono::NaiveDateTime;
 use std::str::FromStr;
-use thiserror::Error;
 
-#[derive(Error, Debug)]
+#[derive(thiserror::Error, Debug)]
 pub enum Error {
     #[error("Missing URL")]
     MissingUrl,

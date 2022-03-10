@@ -7,10 +7,9 @@ use futures::{Stream, TryStreamExt};
 use reqwest::Client;
 use std::io::{BufReader, Read};
 use std::time::Duration;
-use thiserror::Error;
 use tryhard::RetryPolicy;
 
-#[derive(Error, Debug)]
+#[derive(thiserror::Error, Debug)]
 pub enum Error {
     #[error("Item parsing error: {0}")]
     ItemParsingError(#[from] item::Error),
