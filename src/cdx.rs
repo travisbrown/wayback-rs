@@ -144,10 +144,10 @@ impl IndexClient {
         } else {
             let mut rows = serde_json::from_str::<Vec<Vec<String>>>(&contents)?;
             let len = rows.len();
-            let next_resume_key = if rows[len - 2].is_empty() {
-                let mut last = rows.remove(len - 1);
-                rows.remove(len - 2);
-                Some(last.remove(0))
+            // If a resume key is provided, the second-to-last row will be empty.
+            let next_resume_key = if len >= 2 && rows[len - 2].is_empty() {
+                rows.pop()
+                    .and_then(|mut last| rows.pop().and_then(|_| last.pop()))
             } else {
                 None
             };
@@ -194,6 +194,7 @@ impl Default for IndexClient {
 #[cfg(test)]
 mod tests {
     use super::IndexClient;
+    use futures::TryStreamExt;
     use std::fs::File;
 
     #[test]
@@ -202,5 +203,27 @@ mod tests {
         let result = IndexClient::load_json(file).unwrap();
 
         assert_eq!(result.len(), 37);
+    }
+
+    #[tokio::test]
+    async fn stream_search_small() {
+        let client = IndexClient::default();
+
+        // Randomly-selected suspended Twitter account query with 9 snapshots.
+        let stream = client.stream_search("https://twitter.com/0987654321Id", 2);
+        let result = stream.try_collect::<Vec<_>>().await.unwrap();
+
+        assert_eq!(result.len(), 9);
+    }
+
+    #[tokio::test]
+    async fn stream_search_empty() {
+        let client = IndexClient::default();
+
+        // Invalid Twitter account query with 0 snapshots.
+        let stream = client.stream_search("https://twitter.com/00000000000000000000", 2);
+        let result = stream.try_collect::<Vec<_>>().await.unwrap();
+
+        assert_eq!(result.len(), 0);
     }
 }
