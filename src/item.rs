@@ -1,5 +1,7 @@
 use super::util::{parse_timestamp, to_timestamp};
 use chrono::NaiveDateTime;
+use csv::ReaderBuilder;
+use std::io::Read;
 use std::str::FromStr;
 
 #[derive(thiserror::Error, Debug)]
@@ -24,6 +26,8 @@ pub enum Error {
     InvalidStatus { value: String },
     #[error("Invalid Wayback Machine URL: {value}")]
     InvalidWaybackUrl { value: String },
+    #[error("CSV writing error: {0:?}")]
+    Csv(#[from] csv::Error),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
@@ -60,14 +64,14 @@ impl FromStr for UrlInfo {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Ord, PartialOrd)]
 /// Information about a single archived snapshot of a page.
 pub struct Item {
     pub url: String,
     pub archived_at: NaiveDateTime,
     pub digest: String,
     pub mime_type: String,
-    pub length: u64,
+    pub length: u32,
     pub status: Option<u16>,
 }
 
@@ -77,7 +81,7 @@ impl Item {
         archived_at: NaiveDateTime,
         digest: String,
         mime_type: String,
-        length: u64,
+        length: u32,
         status: Option<u16>,
     ) -> Item {
         Item {
@@ -140,7 +144,7 @@ impl Item {
             value: timestamp.to_string(),
         })?;
 
-        let length_parsed = length.parse::<u64>().map_err(|_| Error::InvalidLength {
+        let length_parsed = length.parse::<u32>().map_err(|_| Error::InvalidLength {
             value: length.to_string(),
         })?;
 
@@ -189,5 +193,24 @@ impl Item {
             self.length.to_string(),
             self.status_code(),
         ]
+    }
+
+    pub fn read_csv<R: Read>(reader: R) -> Result<Vec<Self>, Error> {
+        let mut csv_reader = ReaderBuilder::new().has_headers(false).from_reader(reader);
+
+        csv_reader
+            .records()
+            .map(|record| {
+                let row = record?;
+                Ok(Self::parse_optional_record(
+                    row.get(0),
+                    row.get(1),
+                    row.get(2),
+                    row.get(3),
+                    row.get(4),
+                    row.get(5),
+                )?)
+            })
+            .collect()
     }
 }

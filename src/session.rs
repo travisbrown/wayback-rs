@@ -6,12 +6,12 @@ use super::{
 };
 use bytes::Buf;
 use chrono::Utc;
-use csv::{ReaderBuilder, WriterBuilder};
+use csv::WriterBuilder;
 use flate2::{Compression, GzBuilder};
 use futures::{StreamExt, TryStreamExt};
 use std::collections::HashSet;
 use std::fs::{create_dir_all, File};
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 
 #[derive(thiserror::Error, Debug)]
@@ -119,7 +119,7 @@ impl Session {
 
     pub async fn resolve_redirects(&self) -> Result<(), Error> {
         let redirects_item_log = File::open(self.base.join("redirects.csv"))?;
-        let mut items = Self::read_csv(redirects_item_log)?;
+        let mut items = Item::read_csv(redirects_item_log)?;
 
         items.sort();
 
@@ -206,10 +206,10 @@ impl Session {
 
     pub async fn download_items(&self) -> Result<(usize, usize, usize, usize), Error> {
         let originals_file = File::open(self.base.join("originals.csv"))?;
-        let mut items = Self::read_csv(originals_file)?;
+        let mut items = Item::read_csv(originals_file)?;
 
         let extras_file = File::open(self.base.join("extras.csv"))?;
-        items.extend(Self::read_csv(extras_file)?);
+        items.extend(Item::read_csv(extras_file)?);
         items.sort();
 
         let total_count = items.len();
@@ -300,24 +300,5 @@ impl Session {
             total_count - success_count - error_count - invalid_count,
             error_count,
         ))
-    }
-
-    fn read_csv<R: Read>(reader: R) -> Result<Vec<Item>, Error> {
-        let mut csv_reader = ReaderBuilder::new().has_headers(false).from_reader(reader);
-
-        csv_reader
-            .records()
-            .map(|record| {
-                let row = record?;
-                Ok(Item::parse_optional_record(
-                    row.get(0),
-                    row.get(1),
-                    row.get(2),
-                    row.get(3),
-                    row.get(4),
-                    row.get(5),
-                )?)
-            })
-            .collect()
     }
 }
