@@ -87,6 +87,7 @@ impl<W: ParquetWriter + 'static> ParquetFile<W> {
             let mut items = selected_items.into_iter().collect::<Vec<_>>();
             items.sort();
 
+            // We deduplicate items that only differ in mime type, length, or status code.
             let items = items
                 .into_iter()
                 .group_by(|item| (item.url.clone(), item.archived_at, item.digest.clone()))
