@@ -70,9 +70,9 @@ impl<W: ParquetWriter + 'static> ParquetFile<W> {
 
             for path in &paths {
                 let file = File::open(path)?;
-                let items = Item::read_csv(file)?;
 
-                for item in items {
+                for item in Item::iter_csv(file) {
+                    let item = item?;
                     let is_valid_digest = super::digest::is_valid_digest(&item.digest);
                     if (item.digest.starts_with(prefix) && is_valid_digest)
                         || (prefix == '_' && !is_valid_digest)
