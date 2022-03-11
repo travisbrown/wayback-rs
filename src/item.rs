@@ -196,21 +196,22 @@ impl Item {
     }
 
     pub fn read_csv<R: Read>(reader: R) -> Result<Vec<Self>, Error> {
-        let mut csv_reader = ReaderBuilder::new().has_headers(false).from_reader(reader);
+        Self::iter_csv(reader).collect()
+    }
 
-        csv_reader
-            .records()
-            .map(|record| {
-                let row = record?;
-                Ok(Self::parse_optional_record(
-                    row.get(0),
-                    row.get(1),
-                    row.get(2),
-                    row.get(3),
-                    row.get(4),
-                    row.get(5),
-                )?)
-            })
-            .collect()
+    pub fn iter_csv<R: Read>(reader: R) -> impl Iterator<Item = Result<Self, Error>> {
+        let csv_reader = ReaderBuilder::new().has_headers(false).from_reader(reader);
+
+        csv_reader.into_records().map(|record| {
+            let row = record?;
+            Ok(Self::parse_optional_record(
+                row.get(0),
+                row.get(1),
+                row.get(2),
+                row.get(3),
+                row.get(4),
+                row.get(5),
+            )?)
+        })
     }
 }
