@@ -8,12 +8,24 @@ use flate2::read::GzDecoder;
 use sha1::{Digest, Sha1};
 use std::io::{BufWriter, Error, Read};
 
+pub const DIGEST_CHARS: [char; 32] = [
+    '2', '3', '4', '5', '6', '7', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
+    'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
+];
+
+pub fn is_valid_digest(input: &str) -> bool {
+    input.len() == 32
+        && input
+            .chars()
+            .all(|c| (c >= '2' && c <= '7') || (c >= 'A' && c <= 'Z'))
+}
+
 /// Decode a Base32 string into the SHA-1 bytes, returning an empty value if
 /// the input is not a valid Base2-encoded SHA-1 hash.
-pub fn string_to_bytes(digest: &str) -> Option<[u8; 20]> {
-    if digest.len() == 32 {
+pub fn string_to_bytes(input: &str) -> Option<[u8; 20]> {
+    if input.len() == 32 {
         let mut output = [0; 20];
-        let count = BASE32.decode_mut(digest.as_bytes(), &mut output).ok()?;
+        let count = BASE32.decode_mut(input.as_bytes(), &mut output).ok()?;
 
         if count == 20 {
             Some(output)
