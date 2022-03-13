@@ -5,33 +5,37 @@ use parquet::{
     file::reader::{FileReader, SerializedFileReader},
     record::RowAccessor,
 };
+use std::fs::File;
+use std::io::{BufRead, BufReader};
+use wayback_rs::Item;
 
 #[derive(serde::Serialize, serde::Deserialize, Eq, PartialEq, Debug)]
-struct SnapshotUrl {
+struct SnapshotUrl<'a> {
     #[serde(with = "ts_seconds")]
     archived_at: NaiveDateTime,
-    url: String,
+    url: &'a str,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Eq, PartialEq, Debug)]
-struct SnapshotUrlSet {
-    snapshot_urls: Vec<SnapshotUrl>,
+struct SnapshotUrlSet<'a> {
+    #[serde(borrow)]
+    snapshot_urls: Vec<SnapshotUrl<'a>>,
 }
 
-impl SnapshotUrlSet {
-    fn singleton(archived_at: NaiveDateTime, url: String) -> Self {
+impl<'a> SnapshotUrlSet<'a> {
+    fn singleton(archived_at: NaiveDateTime, url: &'a str) -> Self {
         Self {
             snapshot_urls: vec![SnapshotUrl { archived_at, url }],
         }
     }
 
-    fn add(&mut self, snapshot_url: SnapshotUrl) {
+    fn add(&mut self, snapshot_url: SnapshotUrl<'a>) {
         if !self.snapshot_urls.contains(&snapshot_url) {
             self.snapshot_urls.push(snapshot_url);
         }
     }
 
-    fn add_all(&mut self, other: SnapshotUrlSet) {
+    fn add_all(&mut self, other: Self) {
         for snapshot_url in other.snapshot_urls {
             self.add(snapshot_url);
         }
@@ -83,37 +87,143 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("{:?}", result);
             }
         }*/
+        SubCommand::Extract { input, digests } => {
+            let file = File::open(input)?;
+            let reader = SerializedFileReader::new(file)?;
+            let mut count = 0;
+
+            let digests_file = BufReader::new(File::open(digests)?);
+            let mut digests = std::collections::HashSet::new();
+
+            for line in digests_file.lines() {
+                let line = line?;
+                digests.insert(line);
+            }
+
+            let mut csv = csv::WriterBuilder::new().from_writer(std::io::stdout());
+
+            //let mut statuses: std::collections::HashMap<Option<u16>, usize> =
+            //    std::collections::HashMap::new();
+
+            for row in reader.get_row_iter(None)? {
+                //let digest = row.get_string(2)?;
+                let item = row_to_item(row).unwrap();
+
+                if digests.remove(&item.digest) {
+                    csv.write_record(item.to_record())?;
+                }
+            }
+        }
+        SubCommand::Redirects { input, output } => {
+            let file = std::fs::File::open(input)?;
+            let reader = SerializedFileReader::new(file)?;
+            let mut count = 0;
+
+            //let mut statuses: std::collections::HashMap<Option<u16>, usize> =
+            //    std::collections::HashMap::new();
+
+            for row in reader.get_row_iter(None)? {
+                //let digest = row.get_string(2)?;
+                let item = row_to_item(row).unwrap();
+
+                if item.status == Some(302) {
+                    println!("{},{}", item.url, item.digest);
+                }
+            }
+        }
+        SubCommand::Digests { input } => {
+            let schema = parquet::schema::parser::parse_message_type(
+                "
+message item {
+    REQUIRED BYTE_ARRAY digest (UTF8);
+    REQUIRED INT32 archived_at;
+    REQUIRED BYTE_ARRAY digest (UTF8);
+}",
+            )?;
+
+            let file = std::fs::File::open(input)?;
+            let reader = SerializedFileReader::new(file)?;
+            let mut count = 0;
+
+            for row in reader.get_row_iter(Some(schema))? {
+                let digest = row.get_string(2)?;
+
+                println!("{}", digest);
+            }
+        }
         SubCommand::ToDb { input, output } => {
+            let schema = parquet::schema::parser::parse_message_type(
+                "
+message item {
+    REQUIRED BYTE_ARRAY url (UTF8);
+    REQUIRED INT32 archived_at;
+    REQUIRED BYTE_ARRAY digest (UTF8);
+}",
+            )?;
+
             let tree = sled::Config::default()
                 .path(output)
                 .use_compression(true)
                 .open()?;
-            tree.set_merge_operator(SnapshotUrlSet::merge);
+            //tree.set_merge_operator(SnapshotUrlSet::merge);
 
             let file = std::fs::File::open(input)?;
             let reader = SerializedFileReader::new(file)?;
+            let mut count = 0;
 
-            for row in reader.get_row_iter(None)? {
-                let mut url = row.get_string(0)?;
-                /*if url.starts_with("https://twitter.com/") {
-                    url.replace_range(..20, "");
-                }*/
-                let archived_at = NaiveDateTime::from_timestamp(row.get_int(1)? as i64, 0);
+            for row in reader.get_row_iter(Some(schema))? {
+                let url = row.get_string(0)?;
                 let digest = row.get_string(2)?;
-
                 if url.len() < 100 {
-                    tree.merge(
+                    let archived_at = NaiveDateTime::from_timestamp(row.get_int(1)? as i64, 0);
+
+                    tree.insert(
                         digest,
-                        bincode::serialize(&SnapshotUrlSet::singleton(archived_at, url.clone()))?,
+                        bincode::serialize(&SnapshotUrlSet::singleton(archived_at, url))?,
                     )?;
+
+                    if count % 10000 == 1 {
+                        log::info!("{}", count);
+                    }
+                    count += 1;
                 } else {
                     log::warn!("Skipping URL for {}: {}", digest, url);
                 }
             }
         }
+        SubCommand::DownloadRedirects { input } => {
+            let known_digests: Option<String> = None;
+            let session = wayback_rs::session::Session::new(input, known_digests, 4)?;
+            session.resolve_redirects().await?;
+        }
     };
 
     Ok(())
+}
+
+fn row_to_item(row: parquet::record::Row) -> Option<wayback_rs::Item> {
+    let columns = row.get_column_iter();
+    let url = row.get_string(0).ok()?.clone();
+    let archived_at = NaiveDateTime::from_timestamp(row.get_int(1).ok()? as i64, 0);
+    let digest = row.get_string(2).ok()?.clone();
+    let mime_type = row.get_string(3).ok()?.clone();
+    let length = row.get_int(4).ok()? as u32;
+
+    let status_field = columns.skip(5).next()?;
+    let status = if *status_field.1 == parquet::record::Field::Null {
+        None
+    } else {
+        Some(row.get_int(5).ok()? as u16)
+    };
+
+    Some(Item::new(
+        url,
+        archived_at,
+        digest,
+        mime_type,
+        length,
+        status,
+    ))
 }
 
 #[derive(Parser)]
@@ -152,6 +262,32 @@ enum SubCommand {
         /// The output path
         #[clap(long)]
         output: String,
+    },
+    Digests {
+        /// The input file path
+        #[clap(long)]
+        input: String,
+    },
+    Redirects {
+        /// The input file path
+        #[clap(long)]
+        input: String,
+        /// The output path
+        #[clap(long)]
+        output: String,
+    },
+    Extract {
+        /// The input file path
+        #[clap(long)]
+        input: String,
+        /// The digests file path
+        #[clap(long)]
+        digests: String,
+    },
+    DownloadRedirects {
+        /// The input directory path
+        #[clap(long)]
+        input: String,
     },
 }
 
