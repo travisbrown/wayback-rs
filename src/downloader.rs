@@ -86,6 +86,62 @@ impl Downloader {
         )
     }
 
+    pub async fn shallow_resolve_redirect(
+        &self,
+        url: &str,
+        timestamp: &str,
+        expected_digest: &str,
+    ) -> Result<Option<Bytes>, Error> {
+        let initial_url = Self::wayback_url(url, timestamp, true);
+        let initial_response = self.client.head(&initial_url).send().await?;
+
+        match initial_response.status() {
+            StatusCode::FOUND => {
+                match initial_response
+                    .headers()
+                    .get(LOCATION)
+                    .and_then(|value| value.to_str().ok())
+                    .map(str::to_string)
+                {
+                    Some(location) => {
+                        let info = location
+                            .parse::<super::item::UrlInfo>()
+                            .map_err(|_| Error::UnexpectedRedirectUrl(location))?;
+
+                        let guess = super::util::redirect::guess_redirect_content(&info.url);
+                        let mut guess_bytes = guess.as_bytes();
+                        let guess_digest = super::digest::compute_digest(&mut guess_bytes)?;
+
+                        let mut valid_initial_content = true;
+                        let mut valid_digest = true;
+
+                        let content = if guess_digest == expected_digest {
+                            Bytes::from(guess)
+                        } else {
+                            log::warn!("Invalid guess, re-requesting");
+                            let direct_bytes =
+                                self.client.get(&initial_url).send().await?.bytes().await?;
+                            let direct_digest =
+                                super::digest::compute_digest(&mut direct_bytes.clone().reader())?;
+                            valid_initial_content = false;
+                            valid_digest = direct_digest == expected_digest;
+
+                            direct_bytes
+                        };
+
+                        if valid_digest {
+                            Ok(Some(content))
+                        } else {
+                            Ok(None)
+                        }
+                    }
+                    None => Err(Error::UnexpectedRedirect(None)),
+                }
+            }
+            other => Err(Error::UnexpectedStatus(other)),
+        }
+    }
+
     pub async fn resolve_redirect(
         &self,
         url: &str,

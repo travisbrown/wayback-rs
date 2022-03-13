@@ -194,7 +194,7 @@ message item {
         SubCommand::DownloadRedirects { input } => {
             let known_digests: Option<String> = None;
             let session = wayback_rs::session::Session::new(input, known_digests, 4)?;
-            session.resolve_redirects().await?;
+            session.shallow_resolve_redirects().await?;
         }
     };
 

@@ -117,7 +117,80 @@ impl Session {
         Ok(())
     }
 
-    pub async fn resolve_redirects(&self) -> Result<(), Error> {
+    pub async fn shallow_resolve_redirects(&self) -> Result<(), Error> {
+        let redirects_item_log = File::open(self.base.join("redirects.csv"))?;
+        let mut items = Item::read_csv(redirects_item_log)?;
+
+        items.sort();
+
+        create_dir_all(&self.base.join("data"))?;
+        create_dir_all(&self.base.join("invalid"))?;
+
+        let mut digests = HashSet::new();
+
+        items.retain(|item| digests.insert(item.digest.clone()));
+
+        if let Some(path) = &self.known_digests {
+            let file = File::open(path)?;
+            for line in BufReader::new(file).lines() {
+                digests.remove(line?.trim());
+            }
+        }
+
+        items.retain(|item| digests.remove(&item.digest));
+
+        log::info!("Resolving {} items", items.len());
+
+        let results = futures::stream::iter(items.iter())
+            .map(|item| async move {
+                log::info!("Resolving: {}", item.url);
+                (
+                    item,
+                    self.client
+                        .shallow_resolve_redirect(&item.url, &item.timestamp(), &item.digest)
+                        .await,
+                )
+            })
+            .buffer_unordered(self.parallelism)
+            .map(|(item, result)| async move {
+                let maybe_content = result.map_err(|_| item)?;
+
+                if let Some(content) = maybe_content {
+                    let output =
+                        File::create(self.base.join("data").join(format!("{}.gz", item.digest)))
+                            .map_err(|_| item)?;
+                    let mut gz = GzBuilder::new()
+                        .filename(item.make_filename())
+                        .write(output, Compression::default());
+                    gz.write_all(&content).map_err(|_| item)?;
+                    gz.finish().map_err(|_| item)?;
+                }
+
+                let result: Result<(), &Item> = Ok(());
+                result
+            })
+            .buffer_unordered(self.parallelism)
+            .collect::<Vec<_>>()
+            .await;
+
+        create_dir_all(&self.base.join("errors"))?;
+
+        let redirects_error_log = File::create(self.base.join("errors").join("redirects.csv"))?;
+        let mut redirects_error_csv = WriterBuilder::new().from_writer(redirects_error_log);
+
+        for result in results {
+            match result {
+                Ok(()) => {}
+                Err(item) => {
+                    redirects_error_csv.write_record(item.to_record())?;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    pub async fn resolve_redirects(&self, lookup_cdx: bool) -> Result<(), Error> {
         let redirects_item_log = File::open(self.base.join("redirects.csv"))?;
         let mut items = Item::read_csv(redirects_item_log)?;
 
@@ -156,14 +229,6 @@ impl Session {
                 let resolution = result.map_err(|_| item)?;
 
                 if resolution.valid_digest {
-                    let mut items = self
-                        .index_client
-                        .search(&resolution.url, Some(&resolution.timestamp), None)
-                        .await
-                        .map_err(|_| item)?;
-
-                    let actual_item = items.pop().ok_or(item)?;
-
                     let output =
                         File::create(self.base.join("data").join(format!("{}.gz", item.digest)))
                             .map_err(|_| item)?;
@@ -173,12 +238,27 @@ impl Session {
                     gz.write_all(&resolution.content).map_err(|_| item)?;
                     gz.finish().map_err(|_| item)?;
 
-                    Ok(actual_item)
+                    if lookup_cdx {
+                        let mut items = self
+                            .index_client
+                            .search(&resolution.url, Some(&resolution.timestamp), None)
+                            .await
+                            .map_err(|_| item)?;
+
+                        let actual_item = items.pop().ok_or(item)?;
+
+                        Ok(Some(actual_item))
+                    } else {
+                        Ok(None)
+                    }
                 } else {
                     Err(item)
                 }
             })
             .buffer_unordered(self.parallelism)
+            .filter_map(|result| async {
+                result.map_or_else(|error| Some(Err(error)), |value| value.map(Ok))
+            })
             .collect::<Vec<_>>()
             .await;
 
