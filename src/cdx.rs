@@ -104,7 +104,7 @@ impl IndexClient {
                     let (items, resume_key) =
                         retry_future(|| self.search_with_resume_key(query, limit, &key)).await?;
 
-                    log::warn!("{:?}", resume_key);
+                    log::info!("Resume key: {:?}", resume_key);
 
                     Some((items, resume_key.map(Some)))
                 }
@@ -132,7 +132,7 @@ impl IndexClient {
             "{}?url={}{}&limit={}&showResumeKey=true{}",
             self.base, query, resume_key_param, limit, CDX_OPTIONS
         );
-        log::warn!("{}", query_url);
+        log::info!("Search URL: {}", query_url);
         let contents = self.underlying.get(&query_url).send().await?.text().await?;
 
         if contents == BLOCKED_SITE_ERROR_MESSAGE {
@@ -147,7 +147,7 @@ impl IndexClient {
             } else {
                 None
             };
-            log::warn!("received {}", rows.len());
+            log::info!("Rows received {}", rows.len());
 
             Self::decode_rows(rows).map(|items| (items, next_resume_key))
         }
