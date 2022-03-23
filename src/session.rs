@@ -49,7 +49,7 @@ impl Session {
             known_digests: known_digests.map(|path| path.as_ref().to_path_buf()),
             parallelism,
             index_client: IndexClient::default(),
-            client: Downloader::new()?,
+            client: Downloader::default(),
         })
     }
 

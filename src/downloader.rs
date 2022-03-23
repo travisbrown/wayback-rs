@@ -12,6 +12,7 @@ const MAX_RETRIES: u32 = 7;
 const RETRY_INITIAL_DELAY_DURATION: Duration = Duration::from_millis(250);
 const BAD_GATEWAY_DELAY_DURATION: Duration = Duration::from_secs(30);
 const TCP_KEEPALIVE_DURATION: Duration = Duration::from_secs(20);
+const DEFAULT_REQUEST_TIMEOUT_DURATION: Duration = Duration::from_secs(10);
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -67,11 +68,12 @@ pub struct Downloader {
 }
 
 impl Downloader {
-    pub fn new() -> reqwest::Result<Self> {
+    pub fn new(request_timeout: Duration) -> reqwest::Result<Self> {
         let tcp_keepalive = Some(TCP_KEEPALIVE_DURATION);
 
         Ok(Self {
             client: Client::builder()
+                .timeout(request_timeout)
                 .tcp_keepalive(tcp_keepalive)
                 .redirect(redirect::Policy::none())
                 .build()?,
@@ -200,5 +202,11 @@ impl Downloader {
 
     pub async fn download_item(&self, item: &Item) -> Result<Bytes, Error> {
         self.download(&item.url, &item.timestamp(), true).await
+    }
+}
+
+impl Default for Downloader {
+    fn default() -> Self {
+        Self::new(DEFAULT_REQUEST_TIMEOUT_DURATION).unwrap()
     }
 }
