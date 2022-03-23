@@ -57,22 +57,25 @@ impl<E: Debug> OnRetry<E> for LogOnRetry {
         next_delay: Option<Duration>,
         previous_error: &E,
     ) -> Self::Future {
-        let message = if self.level.is_none() {
-            None
-        } else {
-            let waiting_message = match next_delay {
-                Some(delay) => format!("; waiting {:?}", delay),
-                None => "".to_string(),
-            };
-
-            Some(format!(
-                "Retry {}{} after error: {:?}",
-                attempts, waiting_message, previous_error
-            ))
-        };
-        LogFuture {
-            level: self.level,
-            message,
+        match next_delay {
+            Some(delay) => {
+                let message = if self.level.is_none() {
+                    None
+                } else {
+                    Some(format!(
+                        "Retry {}; waiting {:?} after error: {:?}",
+                        attempts, delay, previous_error
+                    ))
+                };
+                LogFuture {
+                    level: self.level,
+                    message,
+                }
+            }
+            None => LogFuture {
+                level: None,
+                message: None,
+            },
         }
     }
 }

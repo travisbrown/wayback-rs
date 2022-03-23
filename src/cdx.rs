@@ -10,6 +10,13 @@ use std::time::Duration;
 use thiserror::Error;
 use tryhard::RetryPolicy;
 
+const TCP_KEEPALIVE_SECS: u64 = 20;
+const DEFAULT_CDX_BASE: &'static str = "http://web.archive.org/cdx/search/cdx";
+const CDX_OPTIONS: &'static str =
+    "&output=json&fl=original,timestamp,digest,mimetype,length,statuscode";
+const BLOCKED_SITE_ERROR_MESSAGE: &'static str =
+        "org.archive.util.io.RuntimeIOException: org.archive.wayback.exception.AdministrativeAccessControlException: Blocked Site Error\n";
+
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Item parsing error: {0}")]
@@ -52,21 +59,13 @@ pub struct IndexClient {
 }
 
 impl IndexClient {
-    const TCP_KEEPALIVE_SECS: u64 = 20;
-    const DEFAULT_CDX_BASE: &'static str = "http://web.archive.org/cdx/search/cdx";
-    const CDX_OPTIONS: &'static str =
-        "&output=json&fl=original,timestamp,digest,mimetype,length,statuscode";
-    const BLOCKED_SITE_ERROR_MESSAGE: &'static str =
-        "org.archive.util.io.RuntimeIOException: org.archive.wayback.exception.AdministrativeAccessControlException: Blocked Site Error\n";
-
-    pub fn new(base: String) -> Self {
-        Self {
+    pub fn new(base: String) -> Result<Self, Error> {
+        Ok(Self {
             base,
             underlying: Client::builder()
-                .tcp_keepalive(Some(Duration::from_secs(Self::TCP_KEEPALIVE_SECS)))
-                .build()
-                .unwrap(),
-        }
+                .tcp_keepalive(Some(Duration::from_secs(TCP_KEEPALIVE_SECS)))
+                .build()?,
+        })
     }
 
     fn decode_rows(rows: Vec<Vec<String>>) -> Result<Vec<Item>, Error> {
@@ -105,7 +104,7 @@ impl IndexClient {
                     let (items, resume_key) =
                         retry_future(|| self.search_with_resume_key(query, limit, &key)).await?;
 
-                    log::warn!("{:?}", resume_key);
+                    log::info!("Resume key: {:?}", resume_key);
 
                     Some((items, resume_key.map(Some)))
                 }
@@ -131,16 +130,12 @@ impl IndexClient {
             .unwrap_or_default();
         let query_url = format!(
             "{}?url={}{}&limit={}&showResumeKey=true{}",
-            self.base,
-            query,
-            resume_key_param,
-            limit,
-            Self::CDX_OPTIONS
+            self.base, query, resume_key_param, limit, CDX_OPTIONS
         );
-        log::warn!("{}", query_url);
+        log::info!("Search URL: {}", query_url);
         let contents = self.underlying.get(&query_url).send().await?.text().await?;
 
-        if contents == Self::BLOCKED_SITE_ERROR_MESSAGE {
+        if contents == BLOCKED_SITE_ERROR_MESSAGE {
             Err(Error::BlockedQuery(query.to_string()))
         } else {
             let mut rows = serde_json::from_str::<Vec<Vec<String>>>(&contents)?;
@@ -152,7 +147,7 @@ impl IndexClient {
             } else {
                 None
             };
-            log::warn!("received {}", rows.len());
+            log::info!("Rows received {}", rows.len());
 
             Self::decode_rows(rows).map(|items| (items, next_resume_key))
         }
@@ -174,10 +169,10 @@ impl IndexClient {
             filter.push_str(&format!("&filter=digest:{}", value));
         }
 
-        let query_url = format!("{}?url={}{}{}", self.base, query, filter, Self::CDX_OPTIONS);
+        let query_url = format!("{}?url={}{}{}", self.base, query, filter, CDX_OPTIONS);
         let contents = self.underlying.get(&query_url).send().await?.text().await?;
 
-        if contents == Self::BLOCKED_SITE_ERROR_MESSAGE {
+        if contents == BLOCKED_SITE_ERROR_MESSAGE {
             Err(Error::BlockedQuery(query.to_string()))
         } else {
             let rows = serde_json::from_str(&contents)?;
@@ -188,7 +183,7 @@ impl IndexClient {
 
 impl Default for IndexClient {
     fn default() -> Self {
-        Self::new(Self::DEFAULT_CDX_BASE.to_string())
+        Self::new(DEFAULT_CDX_BASE.to_string()).unwrap()
     }
 }
 
