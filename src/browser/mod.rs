@@ -22,7 +22,7 @@ impl Client {
 
     pub async fn login(&mut self, username: &str, password: &str) -> Result<(), CmdError> {
         self.underlying.goto(Self::LOGIN_URL).await?;
-        let mut form = self.underlying.form(Self::LOGIN_FORM_LOC).await?;
+        let form = self.underlying.form(Self::LOGIN_FORM_LOC).await?;
         form.set_by_name("username", username)
             .await?
             .set_by_name("password", password)
@@ -42,7 +42,7 @@ impl Client {
             .forever()
             .for_element(Self::SAVE_FORM_LOC)
             .await?;
-        let mut form = self.underlying.form(Self::SAVE_FORM_LOC).await?;
+        let form = self.underlying.form(Self::SAVE_FORM_LOC).await?;
         form.set_by_name("url", url)
             .await?
             .set_by_name("capture_screenshot", "on")
@@ -54,7 +54,7 @@ impl Client {
             .submit()
             .await?;
 
-        let mut result = self
+        let result = self
             .underlying
             .wait()
             .forever()
