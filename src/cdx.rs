@@ -11,10 +11,9 @@ use thiserror::Error;
 use tryhard::RetryPolicy;
 
 const TCP_KEEPALIVE_SECS: u64 = 20;
-const DEFAULT_CDX_BASE: &'static str = "http://web.archive.org/cdx/search/cdx";
-const CDX_OPTIONS: &'static str =
-    "&output=json&fl=original,timestamp,digest,mimetype,length,statuscode";
-const BLOCKED_SITE_ERROR_MESSAGE: &'static str =
+const DEFAULT_CDX_BASE: &str = "http://web.archive.org/cdx/search/cdx";
+const CDX_OPTIONS: &str = "&output=json&fl=original,timestamp,digest,mimetype,length,statuscode";
+const BLOCKED_SITE_ERROR_MESSAGE: &str =
         "org.archive.util.io.RuntimeIOException: org.archive.wayback.exception.AdministrativeAccessControlException: Blocked Site Error\n";
 
 #[derive(Error, Debug)]
