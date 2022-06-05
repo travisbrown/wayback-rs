@@ -149,7 +149,7 @@ impl Store {
     pub fn check_file_location<P: AsRef<Path>>(
         &self,
         candidate: P,
-    ) -> Result<Option<Result<(String, Box<Path>), (String, String)>>, Error> {
+    ) -> Result<Option<(String, Result<Box<Path>, String>)>, Error> {
         let path = candidate.as_ref();
 
         if let Some((name, ext)) = path
@@ -165,11 +165,14 @@ impl Store {
                         let mut file = File::open(path)?;
                         let digest = compute_digest_gz(&mut file)?;
 
-                        if digest == name {
-                            Ok(Some(Ok((name.to_string(), location))))
-                        } else {
-                            Ok(Some(Err((name.to_string(), digest))))
-                        }
+                        Ok(Some((
+                            name.to_string(),
+                            if digest == name {
+                                Ok(location)
+                            } else {
+                                Err(digest)
+                            },
+                        )))
                     }
                 } else {
                     Err(Error::InvalidDigest(name.to_string()))
