@@ -22,8 +22,6 @@ pub enum Error {
     DigestComputationError,
 }
 
-pub type Result<T> = std::result::Result<T, Error>;
-
 lazy_static! {
     static ref NAMES: HashSet<String> = {
         let mut names = HashSet::new();
@@ -49,7 +47,7 @@ impl Store {
         }
     }
 
-    pub fn create<P: AsRef<Path>>(base: P) -> std::io::Result<Self> {
+    pub fn create<P: AsRef<Path>>(base: P) -> Result<Self, std::io::Error> {
         let path = base.as_ref();
 
         for name in NAMES.iter() {
@@ -65,7 +63,7 @@ impl Store {
         &self,
         prefix: Option<&str>,
         n: usize,
-    ) -> impl Stream<Item = Result<(String, String)>> {
+    ) -> impl Stream<Item = Result<(String, String), Error>> {
         futures::stream::iter(self.paths_for_prefix(prefix.unwrap_or("")))
             .map_ok(|(expected, path)| {
                 tokio::spawn(async {
@@ -87,11 +85,11 @@ impl Store {
             .try_buffer_unordered(n)
     }
 
-    fn emit_error<T: 'static, E: Into<Error>>(e: E) -> Box<dyn Iterator<Item = Result<T>>> {
+    fn emit_error<T: 'static, E: Into<Error>>(e: E) -> Box<dyn Iterator<Item = Result<T, Error>>> {
         Box::new(once(Err(e.into())))
     }
 
-    pub fn paths(&self) -> impl Iterator<Item = Result<(String, PathBuf)>> {
+    pub fn paths(&self) -> impl Iterator<Item = Result<(String, PathBuf), Error>> {
         match read_dir(&self.base).and_then(|it| it.collect::<std::result::Result<Vec<_>, _>>()) {
             Err(error) => Self::emit_error(error),
             Ok(mut dirs) => {
@@ -117,7 +115,7 @@ impl Store {
     pub fn paths_for_prefix(
         &self,
         prefix: &str,
-    ) -> impl Iterator<Item = Result<(String, PathBuf)>> {
+    ) -> impl Iterator<Item = Result<(String, PathBuf), Error>> {
         match prefix.chars().next() {
             None => Box::new(self.paths()),
             Some(first_char) => {
@@ -151,7 +149,7 @@ impl Store {
     pub fn check_file_location<P: AsRef<Path>>(
         &self,
         candidate: P,
-    ) -> Result<Option<std::result::Result<(String, Box<Path>), (String, String)>>> {
+    ) -> Result<Option<Result<(String, Box<Path>), (String, String)>>, Error> {
         let path = candidate.as_ref();
 
         if let Some((name, ext)) = path
@@ -210,7 +208,7 @@ impl Store {
     pub fn extract_reader(
         &self,
         digest: &str,
-    ) -> Option<std::io::Result<BufReader<GzDecoder<File>>>> {
+    ) -> Option<Result<BufReader<GzDecoder<File>>, std::io::Error>> {
         self.lookup(digest).map(|path| {
             let file = File::open(path)?;
 
@@ -218,7 +216,7 @@ impl Store {
         })
     }
 
-    pub fn extract(&self, digest: &str) -> Option<std::io::Result<String>> {
+    pub fn extract(&self, digest: &str) -> Option<Result<String, std::io::Error>> {
         self.lookup(digest).map(|path| {
             let file = File::open(path)?;
             let mut buffer = String::new();
@@ -229,7 +227,7 @@ impl Store {
         })
     }
 
-    pub fn extract_bytes(&self, digest: &str) -> Option<std::io::Result<Vec<u8>>> {
+    pub fn extract_bytes(&self, digest: &str) -> Option<Result<Vec<u8>, std::io::Error>> {
         self.lookup(digest).map(|path| {
             let file = File::open(path)?;
             let mut buffer = Vec::new();
@@ -248,7 +246,7 @@ impl Store {
         candidate.len() <= 32 && candidate.chars().all(is_valid_char)
     }
 
-    fn check_file_entry(first: &str, entry: &DirEntry) -> Result<(String, PathBuf)> {
+    fn check_file_entry(first: &str, entry: &DirEntry) -> Result<(String, PathBuf), Error> {
         if entry.file_type()?.is_file() {
             match entry.path().file_stem().and_then(|os| os.to_str()) {
                 None => Err(Error::Unexpected {
@@ -271,7 +269,7 @@ impl Store {
         }
     }
 
-    fn check_dir_entry(entry: &DirEntry) -> Result<String> {
+    fn check_dir_entry(entry: &DirEntry) -> Result<String, Error> {
         if entry.file_type()?.is_dir() {
             match entry.file_name().into_string() {
                 Err(_) => Err(Error::Unexpected {
