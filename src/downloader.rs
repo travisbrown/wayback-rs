@@ -54,6 +54,7 @@ impl Retryable for Error {
     }
 }
 
+#[derive(Debug, Eq, PartialEq)]
 pub struct RedirectResolution {
     pub url: String,
     pub timestamp: String,
