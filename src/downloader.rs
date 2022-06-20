@@ -1,4 +1,5 @@
 use super::{
+    item::UrlInfo,
     util::{retry_future, Retryable},
     Item,
 };
@@ -26,6 +27,8 @@ pub enum Error {
     UnexpectedRedirectUrl(String),
     #[error("Unexpected status code: {0:?}")]
     UnexpectedStatus(StatusCode),
+    #[error("Invalid UTF-8: {0:?}")]
+    InvalidUtf8(#[from] std::str::Utf8Error),
 }
 
 impl Retryable for Error {
@@ -109,7 +112,7 @@ impl Downloader {
                 {
                     Some(location) => {
                         let info = location
-                            .parse::<super::item::UrlInfo>()
+                            .parse::<UrlInfo>()
                             .map_err(|_| Error::UnexpectedRedirectUrl(location))?;
 
                         let guess = super::util::redirect::guess_redirect_content(&info.url);
@@ -138,7 +141,7 @@ impl Downloader {
                             .await?;
 
                         let actual_info = actual_url
-                            .parse::<super::item::UrlInfo>()
+                            .parse::<UrlInfo>()
                             .map_err(|_| Error::UnexpectedRedirectUrl(actual_url))?;
 
                         Ok(RedirectResolution {
@@ -172,6 +175,55 @@ impl Downloader {
                     .map(str::to_string)
                 {
                     Some(location) => Ok(location),
+                    None => Err(Error::UnexpectedRedirect(None)),
+                }
+            }
+            other => Err(Error::UnexpectedStatus(other)),
+        }
+    }
+
+    pub async fn resolve_redirect_shallow(
+        &self,
+        url: &str,
+        timestamp: &str,
+        expected_digest: &str,
+    ) -> Result<(UrlInfo, String, bool), Error> {
+        let initial_url = Self::wayback_url(url, timestamp, true);
+        let initial_response = self.client.head(&initial_url).send().await?;
+
+        match initial_response.status() {
+            StatusCode::FOUND => {
+                match initial_response
+                    .headers()
+                    .get(LOCATION)
+                    .and_then(|value| value.to_str().ok())
+                    .map(str::to_string)
+                {
+                    Some(location) => {
+                        let info = location
+                            .parse::<UrlInfo>()
+                            .map_err(|_| Error::UnexpectedRedirectUrl(location))?;
+
+                        let guess = super::util::redirect::guess_redirect_content(&info.url);
+                        let mut guess_bytes = guess.as_bytes();
+                        let guess_digest = super::digest::compute_digest(&mut guess_bytes)?;
+
+                        let (content, valid_digest) = if guess_digest == expected_digest {
+                            (guess, true)
+                        } else {
+                            log::warn!("Invalid guess, re-requesting");
+                            let direct_bytes =
+                                self.client.get(&initial_url).send().await?.bytes().await?;
+                            let direct_digest =
+                                super::digest::compute_digest(&mut direct_bytes.clone().reader())?;
+                            (
+                                std::str::from_utf8(&direct_bytes)?.to_string(),
+                                direct_digest == expected_digest,
+                            )
+                        };
+
+                        Ok((info, content, valid_digest))
+                    }
                     None => Err(Error::UnexpectedRedirect(None)),
                 }
             }
