@@ -1,6 +1,6 @@
 [package]
 name = "wayback-rs"
-version = "0.4.0"
+version = "0.5.0"
 authors = ["Travis Brown <travisrobertbrown@gmail.com>"]
 license = "MPL-2.0"
 description = "Tools for working with the Internet Archive's Wayback Machine"
