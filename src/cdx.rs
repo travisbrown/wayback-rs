@@ -139,7 +139,7 @@ impl IndexClient {
         } else {
             let mut rows = serde_json::from_str::<Vec<Vec<String>>>(&contents)?;
             let len = rows.len();
-            let next_resume_key = if rows[len - 2].is_empty() {
+            let next_resume_key = if len >= 2 && rows[len - 2].is_empty() {
                 let mut last = rows.remove(len - 1);
                 rows.remove(len - 2);
                 Some(last.remove(0))
