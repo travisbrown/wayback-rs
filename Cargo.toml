@@ -16,7 +16,7 @@ exclude = [ ".github/*", "examples/*" ]
 async-std = "1.9"
 bytes = "1.1"
 chrono = "0.4"
-clap = { version = "3.0", features = ["derive"] }
+clap = { version = "4", features = ["derive"] }
 csv = "1.1"
 data-encoding = "2.3"
 fantoccini = { version = "0.19", features = [ "rustls-tls" ] }
