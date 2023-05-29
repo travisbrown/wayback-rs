@@ -32,7 +32,7 @@ lazy_static! {
 }
 
 fn is_valid_char(c: char) -> bool {
-    ('2'..='7').contains(&c) || ('A'..='Z').contains(&c)
+    ('2'..='7').contains(&c) || c.is_ascii_uppercase()
 }
 
 /// A content-addressable store for compressed Wayback Machine pages.
@@ -190,7 +190,7 @@ impl Store {
             digest.chars().next().map(|first_char| {
                 let path = self
                     .base
-                    .join(&first_char.to_string())
+                    .join(first_char.to_string())
                     .join(format!("{}.gz", digest));
 
                 path.into_boxed_path()
@@ -256,7 +256,7 @@ impl Store {
                     path: entry.path().into_boxed_path(),
                 }),
                 Some(name) => {
-                    if name.starts_with(&first) {
+                    if name.starts_with(first) {
                         Ok((name.to_string(), entry.path()))
                     } else {
                         Err(Error::Unexpected {
