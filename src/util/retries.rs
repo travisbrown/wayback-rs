@@ -1,4 +1,4 @@
-///! Tools for attaching retry logic to error types.
+//! Tools for attaching retry logic to error types.
 use core::pin::Pin;
 use futures::{
     task::{Context, Poll},
