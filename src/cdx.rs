@@ -72,7 +72,7 @@ impl IndexClient {
             .skip(1)
             .map(|row| {
                 Item::parse_optional_record(
-                    row.get(0).map(|v| v.as_str()),
+                    row.first().map(|v| v.as_str()),
                     row.get(1).map(|v| v.as_str()),
                     row.get(2).map(|v| v.as_str()),
                     row.get(3).map(|v| v.as_str()),

@@ -123,8 +123,8 @@ impl Session {
 
         items.sort();
 
-        create_dir_all(&self.base.join("data"))?;
-        create_dir_all(&self.base.join("invalid"))?;
+        create_dir_all(self.base.join("data"))?;
+        create_dir_all(self.base.join("invalid"))?;
 
         let mut digests = HashSet::new();
 
@@ -182,7 +182,7 @@ impl Session {
             .collect::<Vec<_>>()
             .await;
 
-        create_dir_all(&self.base.join("errors"))?;
+        create_dir_all(self.base.join("errors"))?;
 
         let redirects_error_log = File::create(self.base.join("errors").join("redirects.csv"))?;
         let mut redirects_error_csv = WriterBuilder::new().from_writer(redirects_error_log);

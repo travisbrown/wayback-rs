@@ -19,18 +19,18 @@ chrono = "0.4"
 clap = { version = "4", features = ["derive"] }
 csv = "1.1"
 data-encoding = "2.3"
-fantoccini = { version = "0.19", features = [ "rustls-tls" ] }
+fantoccini = { version = "0.21", features = [ "rustls-tls" ] }
 flate2 = "1.0"
 futures = "0.3"
 futures-locks = "0.7"
 lazy_static = "1"
 log = "0.4"
 regex = "1.5"
-reqwest = { version = "0.11", features = [ "json" ] }
+reqwest = { version = "0.12", features = [ "json" ] }
 serde_json = "1.0"
 sha-1 = "0.10"
 simplelog = "0.12"
-thiserror = "1.0"
+thiserror = "2"
 time = "0.3"
-tokio = { version = "1.16", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 tryhard = "0.5"

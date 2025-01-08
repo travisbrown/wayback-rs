@@ -93,7 +93,7 @@ impl Item {
 
     pub fn wayback_url(&self, original: bool) -> String {
         format!(
-            "http://web.archive.org/web/{}{}/{}",
+            "https://web.archive.org/web/{}{}/{}",
             self.timestamp(),
             if original { "id_" } else { "if_" },
             self.url

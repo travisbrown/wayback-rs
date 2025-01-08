@@ -8,7 +8,9 @@ const EXAMPLE_ITEM_QUERY: &str = "twitter.com/travisbrown/status/132355446076592
 fn example_item() -> Item {
     Item::new(
         format!("https://{}", EXAMPLE_ITEM_QUERY),
-        NaiveDate::from_ymd(2020, 11, 3).and_hms(9, 16, 10),
+        NaiveDate::from_ymd_opt(2020, 11, 3)
+            .and_then(|date| date.and_hms_opt(9, 16, 10))
+            .unwrap(),
         "BHEPEG22C5COEOQD46QEFH4XK5SLN32A".to_string(),
         "text/html".to_string(),
         2948,

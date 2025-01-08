@@ -86,7 +86,7 @@ impl Downloader {
 
     fn wayback_url(url: &str, timestamp: &str, original: bool) -> String {
         format!(
-            "http://web.archive.org/web/{}{}/{}",
+            "https://web.archive.org/web/{}{}/{}",
             timestamp,
             if original { "id_" } else { "if_" },
             url
