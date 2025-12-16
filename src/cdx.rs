@@ -4,7 +4,7 @@ use super::{
     Item,
 };
 use futures::{Stream, TryStreamExt};
-use reqwest::Client;
+use reqwest::{header::USER_AGENT, Client};
 use std::io::{BufReader, Read};
 use std::sync::Arc;
 use std::time::Duration;
@@ -57,6 +57,7 @@ pub struct IndexClient {
     base: String,
     underlying: Client,
     pacer: Option<Arc<Pacer>>,
+    user_agent: Option<String>,
 }
 
 impl IndexClient {
@@ -67,6 +68,9 @@ impl IndexClient {
                 .tcp_keepalive(Some(Duration::from_secs(TCP_KEEPALIVE_SECS)))
                 .build()?,
             pacer: None,
+            // Default User-Agent to avoid intermittent 400 HTML responses from CDX
+            // when requests omit a UA header.
+            user_agent: Some(format!("wayback-rs/{}", env!("CARGO_PKG_VERSION"))),
         })
     }
 
@@ -75,6 +79,20 @@ impl IndexClient {
     /// This is purely additive: unless called, behavior is unchanged.
     pub fn with_pacer(mut self, pacer: Arc<Pacer>) -> Self {
         self.pacer = Some(pacer);
+        self
+    }
+
+    /// Attach an opt-in User-Agent header to all CDX requests.
+    ///
+    /// This overrides the default `wayback-rs/<version>` header.
+    pub fn with_user_agent(mut self, user_agent: impl Into<String>) -> Self {
+        self.user_agent = Some(user_agent.into());
+        self
+    }
+
+    /// Disable sending a User-Agent header on CDX requests.
+    pub fn without_user_agent(mut self) -> Self {
+        self.user_agent = None;
         self
     }
 
@@ -146,7 +164,11 @@ impl IndexClient {
         if let Some(pacer) = self.pacer.as_ref() {
             pacer.pace_cdx().await;
         }
-        let contents = self.underlying.get(&query_url).send().await?.text().await?;
+        let mut req = self.underlying.get(&query_url);
+        if let Some(ua) = self.user_agent.as_ref() {
+            req = req.header(USER_AGENT, ua);
+        }
+        let contents = req.send().await?.text().await?;
 
         if contents == BLOCKED_SITE_ERROR_MESSAGE {
             Err(Error::BlockedQuery(query.to_string()))
@@ -186,7 +208,11 @@ impl IndexClient {
         if let Some(pacer) = self.pacer.as_ref() {
             pacer.pace_cdx().await;
         }
-        let contents = self.underlying.get(&query_url).send().await?.text().await?;
+        let mut req = self.underlying.get(&query_url);
+        if let Some(ua) = self.user_agent.as_ref() {
+            req = req.header(USER_AGENT, ua);
+        }
+        let contents = req.send().await?.text().await?;
 
         if contents == BLOCKED_SITE_ERROR_MESSAGE {
             Err(Error::BlockedQuery(query.to_string()))
