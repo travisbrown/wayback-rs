@@ -1,10 +1,11 @@
 use super::{
     item::UrlInfo,
-    util::{retry_future, Retryable},
+    util::{retry_future, Pacer, Retryable},
     Item,
 };
 use bytes::{Buf, Bytes};
 use reqwest::{header::LOCATION, redirect, Client, StatusCode};
+use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
 use tryhard::RetryPolicy;
@@ -69,6 +70,7 @@ pub struct RedirectResolution {
 #[derive(Clone)]
 pub struct Downloader {
     client: Client,
+    pacer: Option<Arc<Pacer>>,
 }
 
 impl Downloader {
@@ -81,7 +83,16 @@ impl Downloader {
                 .tcp_keepalive(tcp_keepalive)
                 .redirect(redirect::Policy::none())
                 .build()?,
+            pacer: None,
         })
+    }
+
+    /// Attach an opt-in request pacer.
+    ///
+    /// This is purely additive: unless called, behavior is unchanged.
+    pub fn with_pacer(mut self, pacer: Arc<Pacer>) -> Self {
+        self.pacer = Some(pacer);
+        self
     }
 
     fn wayback_url(url: &str, timestamp: &str, original: bool) -> String {
@@ -100,6 +111,9 @@ impl Downloader {
         expected_digest: &str,
     ) -> Result<RedirectResolution, Error> {
         let initial_url = Self::wayback_url(url, timestamp, true);
+        if let Some(pacer) = self.pacer.as_ref() {
+            pacer.pace_content().await;
+        }
         let initial_response = self.client.head(&initial_url).send().await?;
 
         match initial_response.status() {
@@ -126,6 +140,9 @@ impl Downloader {
                             Bytes::from(guess)
                         } else {
                             log::warn!("Invalid guess, re-requesting");
+                            if let Some(pacer) = self.pacer.as_ref() {
+                                pacer.pace_content().await;
+                            }
                             let direct_bytes =
                                 self.client.get(&initial_url).send().await?.bytes().await?;
                             let direct_digest =
@@ -160,6 +177,9 @@ impl Downloader {
     }
 
     async fn direct_resolve_redirect(&self, url: &str, timestamp: &str) -> Result<String, Error> {
+        if let Some(pacer) = self.pacer.as_ref() {
+            pacer.pace_content().await;
+        }
         let response = self
             .client
             .head(Self::wayback_url(url, timestamp, true))
@@ -189,6 +209,9 @@ impl Downloader {
         expected_digest: &str,
     ) -> Result<(UrlInfo, String, bool), Error> {
         let initial_url = Self::wayback_url(url, timestamp, true);
+        if let Some(pacer) = self.pacer.as_ref() {
+            pacer.pace_content().await;
+        }
         let initial_response = self.client.head(&initial_url).send().await?;
 
         match initial_response.status() {
@@ -212,6 +235,9 @@ impl Downloader {
                             (guess, true)
                         } else {
                             log::warn!("Invalid guess, re-requesting");
+                            if let Some(pacer) = self.pacer.as_ref() {
+                                pacer.pace_content().await;
+                            }
                             let direct_bytes =
                                 self.client.get(&initial_url).send().await?.bytes().await?;
                             let direct_digest =
@@ -241,6 +267,9 @@ impl Downloader {
         timestamp: &str,
         original: bool,
     ) -> Result<Bytes, Error> {
+        if let Some(pacer) = self.pacer.as_ref() {
+            pacer.pace_content().await;
+        }
         let response = self
             .client
             .get(Self::wayback_url(url, timestamp, original))

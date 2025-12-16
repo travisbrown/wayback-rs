@@ -9,3 +9,4 @@ pub mod util;
 
 pub use downloader::Downloader;
 pub use item::Item;
+pub use util::Pacer;

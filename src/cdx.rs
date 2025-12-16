@@ -1,11 +1,12 @@
 use super::{
     item,
-    util::{retry_future, Retryable},
+    util::{retry_future, Pacer, Retryable},
     Item,
 };
 use futures::{Stream, TryStreamExt};
 use reqwest::Client;
 use std::io::{BufReader, Read};
+use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
 use tryhard::RetryPolicy;
@@ -55,6 +56,7 @@ impl Retryable for Error {
 pub struct IndexClient {
     base: String,
     underlying: Client,
+    pacer: Option<Arc<Pacer>>,
 }
 
 impl IndexClient {
@@ -64,7 +66,16 @@ impl IndexClient {
             underlying: Client::builder()
                 .tcp_keepalive(Some(Duration::from_secs(TCP_KEEPALIVE_SECS)))
                 .build()?,
+            pacer: None,
         })
+    }
+
+    /// Attach an opt-in request pacer.
+    ///
+    /// This is purely additive: unless called, behavior is unchanged.
+    pub fn with_pacer(mut self, pacer: Arc<Pacer>) -> Self {
+        self.pacer = Some(pacer);
+        self
     }
 
     fn decode_rows(rows: Vec<Vec<String>>) -> Result<Vec<Item>, Error> {
@@ -132,6 +143,9 @@ impl IndexClient {
             self.base, query, resume_key_param, limit, CDX_OPTIONS
         );
         log::info!("Search URL: {}", query_url);
+        if let Some(pacer) = self.pacer.as_ref() {
+            pacer.pace_cdx().await;
+        }
         let contents = self.underlying.get(&query_url).send().await?.text().await?;
 
         if contents == BLOCKED_SITE_ERROR_MESSAGE {
@@ -169,6 +183,9 @@ impl IndexClient {
         }
 
         let query_url = format!("{}?url={}{}{}", self.base, query, filter, CDX_OPTIONS);
+        if let Some(pacer) = self.pacer.as_ref() {
+            pacer.pace_cdx().await;
+        }
         let contents = self.underlying.get(&query_url).send().await?.text().await?;
 
         if contents == BLOCKED_SITE_ERROR_MESSAGE {

@@ -28,7 +28,13 @@ fn example_lines() -> Vec<String> {
         .unwrap()
 }
 
+// These tests exercise the live Wayback Machine and can be flaky due to
+// network conditions, service throttling, or transient server-side errors.
+//
+// Run explicitly with:
+//   cargo test --test wayback_cdx -- --ignored
 #[tokio::test]
+#[ignore]
 async fn test_search() {
     let client = IndexClient::default();
     let results = client.search(EXAMPLE_ITEM_QUERY, None, None).await.unwrap();
@@ -37,6 +43,7 @@ async fn test_search() {
 }
 
 #[tokio::test]
+#[ignore]
 async fn test_download() {
     let client = Downloader::default();
     let result = client.download_item(&example_item()).await.unwrap();
