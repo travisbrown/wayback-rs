@@ -9,8 +9,8 @@ use super::{
 use bytes::{Buf, Bytes};
 use reqwest::{header::LOCATION, redirect, Client, StatusCode};
 use std::sync::Arc;
-use std::time::Instant;
 use std::time::Duration;
+use std::time::Instant;
 use thiserror::Error;
 use tryhard::RetryPolicy;
 
@@ -211,25 +211,25 @@ impl Downloader {
                                 .send()
                                 .await
                                 .map_err(|e| {
-                                    if let Some(obs) = self.observer.as_ref() {
-                                        let class = if e.is_timeout() {
-                                            ErrorClass::Timeout
-                                        } else if e.is_connect() {
-                                            ErrorClass::Connect
-                                        } else {
-                                            ErrorClass::Other
-                                        };
-                                        obs.on_event(&super::util::observe::Event::error(
-                                            Surface::Content,
-                                            "GET",
-                                            initial_url_arc.clone(),
-                                            None,
-                                            Some(started.elapsed()),
-                                            class,
-                                        ));
-                                    }
-                                    Error::Client(e)
-                                })?;
+                                if let Some(obs) = self.observer.as_ref() {
+                                    let class = if e.is_timeout() {
+                                        ErrorClass::Timeout
+                                    } else if e.is_connect() {
+                                        ErrorClass::Connect
+                                    } else {
+                                        ErrorClass::Other
+                                    };
+                                    obs.on_event(&super::util::observe::Event::error(
+                                        Surface::Content,
+                                        "GET",
+                                        initial_url_arc.clone(),
+                                        None,
+                                        Some(started.elapsed()),
+                                        class,
+                                    ));
+                                }
+                                Error::Client(e)
+                            })?;
                             let status = response.status();
                             if status != StatusCode::OK {
                                 if let Some(obs) = self.observer.as_ref() {
@@ -465,25 +465,25 @@ impl Downloader {
                                 .send()
                                 .await
                                 .map_err(|e| {
-                                    if let Some(obs) = self.observer.as_ref() {
-                                        let class = if e.is_timeout() {
-                                            ErrorClass::Timeout
-                                        } else if e.is_connect() {
-                                            ErrorClass::Connect
-                                        } else {
-                                            ErrorClass::Other
-                                        };
-                                        obs.on_event(&super::util::observe::Event::error(
-                                            Surface::Content,
-                                            "GET",
-                                            initial_url_arc.clone(),
-                                            None,
-                                            Some(started.elapsed()),
-                                            class,
-                                        ));
-                                    }
-                                    Error::Client(e)
-                                })?;
+                                if let Some(obs) = self.observer.as_ref() {
+                                    let class = if e.is_timeout() {
+                                        ErrorClass::Timeout
+                                    } else if e.is_connect() {
+                                        ErrorClass::Connect
+                                    } else {
+                                        ErrorClass::Other
+                                    };
+                                    obs.on_event(&super::util::observe::Event::error(
+                                        Surface::Content,
+                                        "GET",
+                                        initial_url_arc.clone(),
+                                        None,
+                                        Some(started.elapsed()),
+                                        class,
+                                    ));
+                                }
+                                Error::Client(e)
+                            })?;
                             let status = response.status();
                             if status != StatusCode::OK {
                                 if let Some(obs) = self.observer.as_ref() {

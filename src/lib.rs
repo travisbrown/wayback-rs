@@ -9,5 +9,5 @@ pub mod util;
 
 pub use downloader::Downloader;
 pub use item::Item;
-pub use util::Pacer;
 pub use util::observe::{ErrorClass, Event, Observer, Phase, Surface};
+pub use util::Pacer;
