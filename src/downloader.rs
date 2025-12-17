@@ -126,10 +126,52 @@ impl Downloader {
         if let Some(pacer) = self.pacer.as_ref() {
             pacer.pace_content().await;
         }
-        let initial_response = self.client.head(&initial_url).send().await?;
+        let initial_url_arc: Arc<str> = Arc::from(initial_url.clone());
+        if let Some(obs) = self.observer.as_ref() {
+            obs.on_event(&super::util::observe::Event::start(
+                Surface::Content,
+                "HEAD",
+                initial_url_arc.clone(),
+            ));
+        }
+        let started = Instant::now();
+        let initial_response = self
+            .client
+            .head(initial_url_arc.as_ref())
+            .send()
+            .await
+            .map_err(|e| {
+                if let Some(obs) = self.observer.as_ref() {
+                    let class = if e.is_timeout() {
+                        ErrorClass::Timeout
+                    } else if e.is_connect() {
+                        ErrorClass::Connect
+                    } else {
+                        ErrorClass::Other
+                    };
+                    obs.on_event(&super::util::observe::Event::error(
+                        Surface::Content,
+                        "HEAD",
+                        initial_url_arc.clone(),
+                        None,
+                        Some(started.elapsed()),
+                        class,
+                    ));
+                }
+                Error::Client(e)
+            })?;
 
         match initial_response.status() {
             StatusCode::FOUND => {
+                if let Some(obs) = self.observer.as_ref() {
+                    obs.on_event(&super::util::observe::Event::complete(
+                        Surface::Content,
+                        "HEAD",
+                        initial_url_arc.clone(),
+                        StatusCode::FOUND.as_u16(),
+                        started.elapsed(),
+                    ));
+                }
                 match initial_response
                     .headers()
                     .get(LOCATION)
@@ -155,8 +197,63 @@ impl Downloader {
                             if let Some(pacer) = self.pacer.as_ref() {
                                 pacer.pace_content().await;
                             }
-                            let direct_bytes =
-                                self.client.get(&initial_url).send().await?.bytes().await?;
+                            if let Some(obs) = self.observer.as_ref() {
+                                obs.on_event(&super::util::observe::Event::start(
+                                    Surface::Content,
+                                    "GET",
+                                    initial_url_arc.clone(),
+                                ));
+                            }
+                            let started = Instant::now();
+                            let response = self
+                                .client
+                                .get(initial_url_arc.as_ref())
+                                .send()
+                                .await
+                                .map_err(|e| {
+                                    if let Some(obs) = self.observer.as_ref() {
+                                        let class = if e.is_timeout() {
+                                            ErrorClass::Timeout
+                                        } else if e.is_connect() {
+                                            ErrorClass::Connect
+                                        } else {
+                                            ErrorClass::Other
+                                        };
+                                        obs.on_event(&super::util::observe::Event::error(
+                                            Surface::Content,
+                                            "GET",
+                                            initial_url_arc.clone(),
+                                            None,
+                                            Some(started.elapsed()),
+                                            class,
+                                        ));
+                                    }
+                                    Error::Client(e)
+                                })?;
+                            let status = response.status();
+                            if status != StatusCode::OK {
+                                if let Some(obs) = self.observer.as_ref() {
+                                    obs.on_event(&super::util::observe::Event::error(
+                                        Surface::Content,
+                                        "GET",
+                                        initial_url_arc.clone(),
+                                        Some(status.as_u16()),
+                                        Some(started.elapsed()),
+                                        ErrorClass::Http,
+                                    ));
+                                }
+                                return Err(Error::UnexpectedStatus(status));
+                            }
+                            if let Some(obs) = self.observer.as_ref() {
+                                obs.on_event(&super::util::observe::Event::complete(
+                                    Surface::Content,
+                                    "GET",
+                                    initial_url_arc.clone(),
+                                    200,
+                                    started.elapsed(),
+                                ));
+                            }
+                            let direct_bytes = response.bytes().await?;
                             let direct_digest =
                                 super::digest::compute_digest(&mut direct_bytes.clone().reader())?;
                             valid_initial_content = false;
@@ -184,7 +281,19 @@ impl Downloader {
                     None => Err(Error::UnexpectedRedirect(None)),
                 }
             }
-            other => Err(Error::UnexpectedStatus(other)),
+            other => {
+                if let Some(obs) = self.observer.as_ref() {
+                    obs.on_event(&super::util::observe::Event::error(
+                        Surface::Content,
+                        "HEAD",
+                        initial_url_arc.clone(),
+                        Some(other.as_u16()),
+                        Some(started.elapsed()),
+                        ErrorClass::Http,
+                    ));
+                }
+                Err(Error::UnexpectedStatus(other))
+            }
         }
     }
 
@@ -192,14 +301,52 @@ impl Downloader {
         if let Some(pacer) = self.pacer.as_ref() {
             pacer.pace_content().await;
         }
+        let req_url: Arc<str> = Arc::from(Self::wayback_url(url, timestamp, true));
+        if let Some(obs) = self.observer.as_ref() {
+            obs.on_event(&super::util::observe::Event::start(
+                Surface::Content,
+                "HEAD",
+                req_url.clone(),
+            ));
+        }
+        let started = Instant::now();
         let response = self
             .client
-            .head(Self::wayback_url(url, timestamp, true))
+            .head(req_url.as_ref())
             .send()
-            .await?;
+            .await
+            .map_err(|e| {
+                if let Some(obs) = self.observer.as_ref() {
+                    let class = if e.is_timeout() {
+                        ErrorClass::Timeout
+                    } else if e.is_connect() {
+                        ErrorClass::Connect
+                    } else {
+                        ErrorClass::Other
+                    };
+                    obs.on_event(&super::util::observe::Event::error(
+                        Surface::Content,
+                        "HEAD",
+                        req_url.clone(),
+                        None,
+                        Some(started.elapsed()),
+                        class,
+                    ));
+                }
+                Error::Client(e)
+            })?;
 
         match response.status() {
             StatusCode::FOUND => {
+                if let Some(obs) = self.observer.as_ref() {
+                    obs.on_event(&super::util::observe::Event::complete(
+                        Surface::Content,
+                        "HEAD",
+                        req_url.clone(),
+                        StatusCode::FOUND.as_u16(),
+                        started.elapsed(),
+                    ));
+                }
                 match response
                     .headers()
                     .get(LOCATION)
@@ -210,7 +357,19 @@ impl Downloader {
                     None => Err(Error::UnexpectedRedirect(None)),
                 }
             }
-            other => Err(Error::UnexpectedStatus(other)),
+            other => {
+                if let Some(obs) = self.observer.as_ref() {
+                    obs.on_event(&super::util::observe::Event::error(
+                        Surface::Content,
+                        "HEAD",
+                        req_url.clone(),
+                        Some(other.as_u16()),
+                        Some(started.elapsed()),
+                        ErrorClass::Http,
+                    ));
+                }
+                Err(Error::UnexpectedStatus(other))
+            }
         }
     }
 
@@ -224,10 +383,52 @@ impl Downloader {
         if let Some(pacer) = self.pacer.as_ref() {
             pacer.pace_content().await;
         }
-        let initial_response = self.client.head(&initial_url).send().await?;
+        let initial_url_arc: Arc<str> = Arc::from(initial_url.clone());
+        if let Some(obs) = self.observer.as_ref() {
+            obs.on_event(&super::util::observe::Event::start(
+                Surface::Content,
+                "HEAD",
+                initial_url_arc.clone(),
+            ));
+        }
+        let started = Instant::now();
+        let initial_response = self
+            .client
+            .head(initial_url_arc.as_ref())
+            .send()
+            .await
+            .map_err(|e| {
+                if let Some(obs) = self.observer.as_ref() {
+                    let class = if e.is_timeout() {
+                        ErrorClass::Timeout
+                    } else if e.is_connect() {
+                        ErrorClass::Connect
+                    } else {
+                        ErrorClass::Other
+                    };
+                    obs.on_event(&super::util::observe::Event::error(
+                        Surface::Content,
+                        "HEAD",
+                        initial_url_arc.clone(),
+                        None,
+                        Some(started.elapsed()),
+                        class,
+                    ));
+                }
+                Error::Client(e)
+            })?;
 
         match initial_response.status() {
             StatusCode::FOUND => {
+                if let Some(obs) = self.observer.as_ref() {
+                    obs.on_event(&super::util::observe::Event::complete(
+                        Surface::Content,
+                        "HEAD",
+                        initial_url_arc.clone(),
+                        StatusCode::FOUND.as_u16(),
+                        started.elapsed(),
+                    ));
+                }
                 match initial_response
                     .headers()
                     .get(LOCATION)
@@ -250,8 +451,63 @@ impl Downloader {
                             if let Some(pacer) = self.pacer.as_ref() {
                                 pacer.pace_content().await;
                             }
-                            let direct_bytes =
-                                self.client.get(&initial_url).send().await?.bytes().await?;
+                            if let Some(obs) = self.observer.as_ref() {
+                                obs.on_event(&super::util::observe::Event::start(
+                                    Surface::Content,
+                                    "GET",
+                                    initial_url_arc.clone(),
+                                ));
+                            }
+                            let started = Instant::now();
+                            let response = self
+                                .client
+                                .get(initial_url_arc.as_ref())
+                                .send()
+                                .await
+                                .map_err(|e| {
+                                    if let Some(obs) = self.observer.as_ref() {
+                                        let class = if e.is_timeout() {
+                                            ErrorClass::Timeout
+                                        } else if e.is_connect() {
+                                            ErrorClass::Connect
+                                        } else {
+                                            ErrorClass::Other
+                                        };
+                                        obs.on_event(&super::util::observe::Event::error(
+                                            Surface::Content,
+                                            "GET",
+                                            initial_url_arc.clone(),
+                                            None,
+                                            Some(started.elapsed()),
+                                            class,
+                                        ));
+                                    }
+                                    Error::Client(e)
+                                })?;
+                            let status = response.status();
+                            if status != StatusCode::OK {
+                                if let Some(obs) = self.observer.as_ref() {
+                                    obs.on_event(&super::util::observe::Event::error(
+                                        Surface::Content,
+                                        "GET",
+                                        initial_url_arc.clone(),
+                                        Some(status.as_u16()),
+                                        Some(started.elapsed()),
+                                        ErrorClass::Http,
+                                    ));
+                                }
+                                return Err(Error::UnexpectedStatus(status));
+                            }
+                            if let Some(obs) = self.observer.as_ref() {
+                                obs.on_event(&super::util::observe::Event::complete(
+                                    Surface::Content,
+                                    "GET",
+                                    initial_url_arc.clone(),
+                                    200,
+                                    started.elapsed(),
+                                ));
+                            }
+                            let direct_bytes = response.bytes().await?;
                             let direct_digest =
                                 super::digest::compute_digest(&mut direct_bytes.clone().reader())?;
                             (
@@ -265,7 +521,19 @@ impl Downloader {
                     None => Err(Error::UnexpectedRedirect(None)),
                 }
             }
-            other => Err(Error::UnexpectedStatus(other)),
+            other => {
+                if let Some(obs) = self.observer.as_ref() {
+                    obs.on_event(&super::util::observe::Event::error(
+                        Surface::Content,
+                        "HEAD",
+                        initial_url_arc.clone(),
+                        Some(other.as_u16()),
+                        Some(started.elapsed()),
+                        ErrorClass::Http,
+                    ));
+                }
+                Err(Error::UnexpectedStatus(other))
+            }
         }
     }
 

@@ -18,8 +18,22 @@ use tryhard::RetryPolicy;
 const TCP_KEEPALIVE_SECS: u64 = 20;
 const DEFAULT_CDX_BASE: &str = "http://web.archive.org/cdx/search/cdx";
 const CDX_OPTIONS: &str = "&output=json&fl=original,timestamp,digest,mimetype,length,statuscode";
-const BLOCKED_SITE_ERROR_MESSAGE: &str =
-        "org.archive.util.io.RuntimeIOException: org.archive.wayback.exception.AdministrativeAccessControlException: Blocked Site Error\n";
+
+fn is_blocked_site_body(body: &str) -> bool {
+    // The CDX backend has historically returned a plain-text Java stack-trace line. That
+    // string is brittle, so treat it as a heuristic signal instead of an exact match.
+    //
+    // We keep this cheap (no regex) and tolerant (case-insensitive substring checks).
+    let s = body.trim();
+    if s.is_empty() {
+        return false;
+    }
+
+    let lower = s.to_ascii_lowercase();
+    lower.contains("blocked site error")
+        || lower.contains("administrativeaccesscontrolexception")
+        || lower.contains("blocked query")
+}
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -229,7 +243,17 @@ impl IndexClient {
             ));
         }
 
-        if contents == BLOCKED_SITE_ERROR_MESSAGE {
+        if is_blocked_site_body(&contents) {
+            if let Some(obs) = self.observer.as_ref() {
+                obs.on_event(&super::util::observe::Event::error(
+                    Surface::Cdx,
+                    "GET",
+                    url_arc.clone(),
+                    Some(status.as_u16()),
+                    Some(started.elapsed()),
+                    ErrorClass::Blocked,
+                ));
+            }
             Err(Error::BlockedQuery(query.to_string()))
         } else {
             let mut rows = match serde_json::from_str::<Vec<Vec<String>>>(&contents) {
@@ -345,7 +369,17 @@ impl IndexClient {
             ));
         }
 
-        if contents == BLOCKED_SITE_ERROR_MESSAGE {
+        if is_blocked_site_body(&contents) {
+            if let Some(obs) = self.observer.as_ref() {
+                obs.on_event(&super::util::observe::Event::error(
+                    Surface::Cdx,
+                    "GET",
+                    url_arc.clone(),
+                    Some(status.as_u16()),
+                    Some(started.elapsed()),
+                    ErrorClass::Blocked,
+                ));
+            }
             Err(Error::BlockedQuery(query.to_string()))
         } else {
             let rows = match serde_json::from_str(&contents) {

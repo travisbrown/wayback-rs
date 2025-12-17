@@ -27,6 +27,12 @@ pub enum ErrorClass {
     Tls,
     Protocol,
     Decode,
+    /// Indicates the Wayback service is explicitly blocking the requested site/query.
+    ///
+    /// This is distinct from generic decode errors (e.g., HTML error pages) and is useful
+    /// for long-running tools that should avoid repeatedly retrying permanently blocked
+    /// targets.
+    Blocked,
     Http,
     Other,
 }
