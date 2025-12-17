@@ -19,7 +19,7 @@ chrono = "0.4"
 clap = { version = "4", features = ["derive"] }
 csv = "1.1"
 data-encoding = "2.3"
-fantoccini = { version = "0.21", features = [ "rustls-tls" ] }
+fantoccini = { version = "0.22", features = [ "rustls-tls" ] }
 flate2 = "1.0"
 futures = "0.3"
 futures-locks = "0.7"
