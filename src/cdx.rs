@@ -10,8 +10,8 @@ use futures::{Stream, TryStreamExt};
 use reqwest::{header::USER_AGENT, Client};
 use std::io::{BufReader, Read};
 use std::sync::Arc;
-use std::time::Instant;
 use std::time::Duration;
+use std::time::Instant;
 use thiserror::Error;
 use tryhard::RetryPolicy;
 

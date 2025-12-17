@@ -122,5 +122,3 @@ impl Event {
 pub trait Observer: Send + Sync {
     fn on_event(&self, event: &Event);
 }
-
-
