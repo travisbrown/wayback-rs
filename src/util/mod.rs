@@ -5,6 +5,8 @@ use std::sync::Arc;
 mod retries;
 pub use retries::{retry_future, Retryable};
 
+pub mod observe;
+
 const DATE_FMT: &str = "%Y%m%d%H%M%S";
 
 /// Opt-in request pacing hooks.

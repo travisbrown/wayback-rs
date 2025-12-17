@@ -1,12 +1,16 @@
 use super::{
     item,
-    util::{retry_future, Pacer, Retryable},
+    util::{
+        observe::{ErrorClass, Observer, Surface},
+        retry_future, Pacer, Retryable,
+    },
     Item,
 };
 use futures::{Stream, TryStreamExt};
 use reqwest::{header::USER_AGENT, Client};
 use std::io::{BufReader, Read};
 use std::sync::Arc;
+use std::time::Instant;
 use std::time::Duration;
 use thiserror::Error;
 use tryhard::RetryPolicy;
@@ -58,6 +62,7 @@ pub struct IndexClient {
     underlying: Client,
     pacer: Option<Arc<Pacer>>,
     user_agent: Option<String>,
+    observer: Option<Arc<dyn Observer>>,
 }
 
 impl IndexClient {
@@ -71,6 +76,7 @@ impl IndexClient {
             // Default User-Agent to avoid intermittent 400 HTML responses from CDX
             // when requests omit a UA header.
             user_agent: Some(format!("wayback-rs/{}", env!("CARGO_PKG_VERSION"))),
+            observer: None,
         })
     }
 
@@ -79,6 +85,12 @@ impl IndexClient {
     /// This is purely additive: unless called, behavior is unchanged.
     pub fn with_pacer(mut self, pacer: Arc<Pacer>) -> Self {
         self.pacer = Some(pacer);
+        self
+    }
+
+    /// Attach an opt-in observer that receives request/response events.
+    pub fn with_observer(mut self, observer: Arc<dyn Observer>) -> Self {
+        self.observer = Some(observer);
         self
     }
 
@@ -161,6 +173,14 @@ impl IndexClient {
             self.base, query, resume_key_param, limit, CDX_OPTIONS
         );
         log::info!("Search URL: {}", query_url);
+        let url_arc: Arc<str> = Arc::from(query_url.clone());
+        if let Some(obs) = self.observer.as_ref() {
+            obs.on_event(&super::util::observe::Event::start(
+                Surface::Cdx,
+                "GET",
+                url_arc.clone(),
+            ));
+        }
         if let Some(pacer) = self.pacer.as_ref() {
             pacer.pace_cdx().await;
         }
@@ -168,12 +188,76 @@ impl IndexClient {
         if let Some(ua) = self.user_agent.as_ref() {
             req = req.header(USER_AGENT, ua);
         }
-        let contents = req.send().await?.text().await?;
+        let started = Instant::now();
+        let response = match req.send().await {
+            Ok(r) => r,
+            Err(e) => {
+                if let Some(obs) = self.observer.as_ref() {
+                    let class = if e.is_timeout() {
+                        ErrorClass::Timeout
+                    } else if e.is_connect() {
+                        ErrorClass::Connect
+                    } else {
+                        ErrorClass::Other
+                    };
+                    obs.on_event(&super::util::observe::Event::error(
+                        Surface::Cdx,
+                        "GET",
+                        url_arc.clone(),
+                        None,
+                        Some(started.elapsed()),
+                        class,
+                    ));
+                }
+                return Err(Error::HttpClientError(e));
+            }
+        };
+        let status = response.status();
+        let content_type = response
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_string);
+        let contents = response.text().await?;
+        if let Some(obs) = self.observer.as_ref() {
+            obs.on_event(&super::util::observe::Event::complete(
+                Surface::Cdx,
+                "GET",
+                url_arc.clone(),
+                status.as_u16(),
+                started.elapsed(),
+            ));
+        }
 
         if contents == BLOCKED_SITE_ERROR_MESSAGE {
             Err(Error::BlockedQuery(query.to_string()))
         } else {
-            let mut rows = serde_json::from_str::<Vec<Vec<String>>>(&contents)?;
+            let mut rows = match serde_json::from_str::<Vec<Vec<String>>>(&contents) {
+                Ok(v) => v,
+                Err(e) => {
+                    // Keep diagnostics low-noise: only log details at debug, and only on JSON
+                    // failures. The retry logger already emits WARN-level messages.
+                    let preview_len = contents.len().min(300);
+                    let preview = &contents[..preview_len];
+                    log::debug!(
+                        "CDX response was not valid JSON (status: {}, content-type: {:?}, body_preview: {:?})",
+                        status,
+                        content_type,
+                        preview
+                    );
+                    if let Some(obs) = self.observer.as_ref() {
+                        obs.on_event(&super::util::observe::Event::error(
+                            Surface::Cdx,
+                            "GET",
+                            url_arc.clone(),
+                            Some(status.as_u16()),
+                            Some(started.elapsed()),
+                            ErrorClass::Decode,
+                        ));
+                    }
+                    return Err(Error::JsonError(e));
+                }
+            };
             let len = rows.len();
             let next_resume_key = if len >= 2 && rows[len - 2].is_empty() {
                 let mut last = rows.remove(len - 1);
@@ -208,16 +292,86 @@ impl IndexClient {
         if let Some(pacer) = self.pacer.as_ref() {
             pacer.pace_cdx().await;
         }
+        let url_arc: Arc<str> = Arc::from(query_url.clone());
+        if let Some(obs) = self.observer.as_ref() {
+            obs.on_event(&super::util::observe::Event::start(
+                Surface::Cdx,
+                "GET",
+                url_arc.clone(),
+            ));
+        }
         let mut req = self.underlying.get(&query_url);
         if let Some(ua) = self.user_agent.as_ref() {
             req = req.header(USER_AGENT, ua);
         }
-        let contents = req.send().await?.text().await?;
+        let started = Instant::now();
+        let response = match req.send().await {
+            Ok(r) => r,
+            Err(e) => {
+                if let Some(obs) = self.observer.as_ref() {
+                    let class = if e.is_timeout() {
+                        ErrorClass::Timeout
+                    } else if e.is_connect() {
+                        ErrorClass::Connect
+                    } else {
+                        ErrorClass::Other
+                    };
+                    obs.on_event(&super::util::observe::Event::error(
+                        Surface::Cdx,
+                        "GET",
+                        url_arc.clone(),
+                        None,
+                        Some(started.elapsed()),
+                        class,
+                    ));
+                }
+                return Err(Error::HttpClientError(e));
+            }
+        };
+        let status = response.status();
+        let content_type = response
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_string);
+        let contents = response.text().await?;
+        if let Some(obs) = self.observer.as_ref() {
+            obs.on_event(&super::util::observe::Event::complete(
+                Surface::Cdx,
+                "GET",
+                url_arc.clone(),
+                status.as_u16(),
+                started.elapsed(),
+            ));
+        }
 
         if contents == BLOCKED_SITE_ERROR_MESSAGE {
             Err(Error::BlockedQuery(query.to_string()))
         } else {
-            let rows = serde_json::from_str(&contents)?;
+            let rows = match serde_json::from_str(&contents) {
+                Ok(v) => v,
+                Err(e) => {
+                    let preview_len = contents.len().min(300);
+                    let preview = &contents[..preview_len];
+                    log::debug!(
+                        "CDX response was not valid JSON (status: {}, content-type: {:?}, body_preview: {:?})",
+                        status,
+                        content_type,
+                        preview
+                    );
+                    if let Some(obs) = self.observer.as_ref() {
+                        obs.on_event(&super::util::observe::Event::error(
+                            Surface::Cdx,
+                            "GET",
+                            url_arc.clone(),
+                            Some(status.as_u16()),
+                            Some(started.elapsed()),
+                            ErrorClass::Decode,
+                        ));
+                    }
+                    return Err(Error::JsonError(e));
+                }
+            };
             Self::decode_rows(rows)
         }
     }

@@ -1,11 +1,15 @@
 use super::{
     item::UrlInfo,
-    util::{retry_future, Pacer, Retryable},
+    util::{
+        observe::{ErrorClass, Observer, Surface},
+        retry_future, Pacer, Retryable,
+    },
     Item,
 };
 use bytes::{Buf, Bytes};
 use reqwest::{header::LOCATION, redirect, Client, StatusCode};
 use std::sync::Arc;
+use std::time::Instant;
 use std::time::Duration;
 use thiserror::Error;
 use tryhard::RetryPolicy;
@@ -71,6 +75,7 @@ pub struct RedirectResolution {
 pub struct Downloader {
     client: Client,
     pacer: Option<Arc<Pacer>>,
+    observer: Option<Arc<dyn Observer>>,
 }
 
 impl Downloader {
@@ -84,6 +89,7 @@ impl Downloader {
                 .redirect(redirect::Policy::none())
                 .build()?,
             pacer: None,
+            observer: None,
         })
     }
 
@@ -92,6 +98,12 @@ impl Downloader {
     /// This is purely additive: unless called, behavior is unchanged.
     pub fn with_pacer(mut self, pacer: Arc<Pacer>) -> Self {
         self.pacer = Some(pacer);
+        self
+    }
+
+    /// Attach an opt-in observer that receives request/response events.
+    pub fn with_observer(mut self, observer: Arc<dyn Observer>) -> Self {
+        self.observer = Some(observer);
         self
     }
 
@@ -270,15 +282,67 @@ impl Downloader {
         if let Some(pacer) = self.pacer.as_ref() {
             pacer.pace_content().await;
         }
+        let req_url: Arc<str> = Arc::from(Self::wayback_url(url, timestamp, original));
+        if let Some(obs) = self.observer.as_ref() {
+            obs.on_event(&super::util::observe::Event::start(
+                Surface::Content,
+                "GET",
+                req_url.clone(),
+            ));
+        }
+        let started = Instant::now();
         let response = self
             .client
-            .get(Self::wayback_url(url, timestamp, original))
+            .get(req_url.as_ref())
             .send()
-            .await?;
+            .await
+            .map_err(|e| {
+                if let Some(obs) = self.observer.as_ref() {
+                    let class = if e.is_timeout() {
+                        ErrorClass::Timeout
+                    } else if e.is_connect() {
+                        ErrorClass::Connect
+                    } else {
+                        ErrorClass::Other
+                    };
+                    obs.on_event(&super::util::observe::Event::error(
+                        Surface::Content,
+                        "GET",
+                        req_url.clone(),
+                        None,
+                        Some(started.elapsed()),
+                        class,
+                    ));
+                }
+                Error::Client(e)
+            })?;
 
         match response.status() {
-            StatusCode::OK => Ok(response.bytes().await?),
-            other => Err(Error::UnexpectedStatus(other)),
+            StatusCode::OK => {
+                if let Some(obs) = self.observer.as_ref() {
+                    obs.on_event(&super::util::observe::Event::complete(
+                        Surface::Content,
+                        "GET",
+                        req_url.clone(),
+                        200,
+                        started.elapsed(),
+                    ));
+                }
+                Ok(response.bytes().await?)
+            }
+            other => {
+                if let Some(obs) = self.observer.as_ref() {
+                    obs.on_event(&super::util::observe::Event::error(
+                        Surface::Content,
+                        "GET",
+                        req_url.clone(),
+                        Some(other.as_u16()),
+                        Some(started.elapsed()),
+                        ErrorClass::Http,
+                    ));
+                }
+                Err(Error::UnexpectedStatus(other))
+            }
         }
     }
 
